@@ -1,0 +1,125 @@
+generator client {
+ provider = "prisma-client-js"
+}
+datasource db {
+ provider = "sqlite"
+ url = env("DATABASE_URL")
+}
+model Admin {
+ id String @id @default(cuid())
+ email String @unique
+ passwordHash String
+ verifiedAt DateTime?
+ verificationHash String? @unique
+ verificationExpiresAt DateTime?
+ verificationSentAt DateTime?
+ subjects Subject[]
+ quizzes Quiz[]
+}
+model Subject {
+ id String @id @default(cuid())
+ adminId String
+ admin Admin @relation(fields: [adminId], references: [id], onDelete: Cascade)
+ name String
+ nameKey String
+ @@unique([adminId, nameKey])
+}
+
+model Quiz {
+ id String @id @default(cuid())
+ code String @unique @default(cuid())
+ adminId String
+ admin Admin @relation(fields: [adminId], references: [id])
+ title String
+ course String
+ description String
+ semester String
+ instructions String
+ durationMinutes Int
+ totalMarks Int
+ published Boolean @default(false)
+ opensAt DateTime?
+ expiresAt DateTime?
+ closedAt DateTime?
+ resultsReleasedAt DateTime?
+ randomQuestions Boolean @default(false)
+ randomOptions Boolean @default(false)
+ requireFullscreen Boolean @default(true)
+ detectTabSwitch Boolean @default(true)
+ terminateOnTabSwitch Boolean @default(true)
+ autoSubmit Boolean @default(true)
+ multipleAttempts Boolean @default(false)
+ showResults Boolean @default(true)
+ createdAt DateTime @default(now())
+ questions Question[]
+ attempts QuizAttempt[]
+}
+model Question {
+ id String @id @default(cuid())
+ quizId String
+ quiz Quiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
+ text String
+ position Int
+ marks Int
+ options Option[]
+ answers StudentAnswer[]
+ @@unique([quizId, position])
+}
+model Option {
+ id String @id @default(cuid())
+ questionId String
+ question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+ text String
+ position Int
+ correct Boolean @default(false)
+ answers StudentAnswer[]
+ @@unique([questionId, position])
+}
+model Student {
+ id String @id @default(cuid())
+ rollNumber String @unique
+ name String
+ semester String
+ attempts QuizAttempt[]
+}
+model QuizAttempt {
+ id String @id @default(cuid())
+ quizId String
+ quiz Quiz @relation(fields: [quizId], references: [id])
+ studentId String
+ student Student @relation(fields: [studentId], references: [id])
+ tokenHash String @unique
+ activeKey String? @unique
+ studentName String
+ rollNumber String
+ semester String
+ quizTitle String
+ totalMarks Int
+ obtainedMarks Int @default(0)
+ status String @default("IN_PROGRESS")
+ questionOrder String
+ startedAt DateTime @default(now())
+ endsAt DateTime
+ submittedAt DateTime?
+ answers StudentAnswer[]
+ violations Violation[]
+ @@index([quizId, studentId])
+}
+model StudentAnswer {
+ id String @id @default(cuid())
+ attemptId String
+ attempt QuizAttempt @relation(fields: [attemptId], references: [id])
+ questionId String
+ question Question @relation(fields: [questionId], references: [id])
+ optionId String
+ option Option @relation(fields: [optionId], references: [id])
+ updatedAt DateTime @updatedAt
+ @@unique([attemptId, questionId])
+}
+model Violation {
+ id String @id @default(cuid())
+ attemptId String
+ attempt QuizAttempt @relation(fields: [attemptId], references: [id])
+ type String
+ createdAt DateTime @default(now())
+}

@@ -1,0 +1,2 @@
+ALTER TABLE "Quiz" ADD COLUMN "opensAt" DATETIME;
+ALTER TABLE "Quiz" ADD COLUMN "resultsReleasedAt" DATETIME;
