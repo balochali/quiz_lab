@@ -3,6 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { cookies } from "next/headers";
 import { z } from "zod";
 import { cookieOptions, hashToken } from "./auth";
+import { calculateScore } from "./grading";
 import { quizLinkClosed } from "./quiz-schedule";
 import { db } from "./db";
 
@@ -31,7 +32,7 @@ async function finish(tx: Prisma.TransactionClient, id: string, status: string, 
   const answers = await tx.studentAnswer.findMany({
     where: { attemptId: id }, select: { option: { select: { correct: true } }, question: { select: { marks: true } } },
   });
-  const obtainedMarks = answers.reduce((score, a) => score + (a.option.correct ? a.question.marks : 0), 0);
+  const obtainedMarks = calculateScore(answers);
   await tx.quizAttempt.updateMany({
     where: { id, status: IN_PROGRESS },
     data: { status, obtainedMarks, submittedAt, activeKey: null },
@@ -56,6 +57,8 @@ export async function startAttempt(code: string, input: unknown) {
   const token = randomBytes(32).toString("hex");
   const jar = await cookies();
   const result = await db.$transaction(async tx => {
+    // Serialize starts with closure and regrading so a new attempt cannot use stale marks.
+    await tx.quiz.updateMany({ where: { code, published: true }, data: { published: true } });
     const quiz = await tx.quiz.findUnique({
       where: { code, published: true },
       include: { questions: { orderBy: { position: "asc" }, include: { options: { orderBy: { position: "asc" }, select: { id: true } } } } },

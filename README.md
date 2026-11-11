@@ -47,6 +47,10 @@ Pick a lab subject in Quiz information. In Publish, leave the opening time blank
 
 In Settings, choose immediate scores after each attempt or manual release. Open the quiz’s Leaderboard from the quiz library to rank finalized attempts and release held scores. Students who keep their result page open see their individual score when it is released. The leaderboard is available only to the lecturer.
 
+## Correct marks after submissions
+
+For a mistaken question mark allocation, open Quizzes → View quiz → Correct question marks. First close the student link through Link & leaderboard and wait for active attempts to finish. Select the question, enter the corrected marks, and confirm regrading. The quiz total and all saved attempt scores are updated together, including leaderboard and CSV results.
+
 ## Examination behavior
 
 Fullscreen is requested before the browser starts a new attempt when required. The server owns the deadline, attempt cookie, scoring, and final status. A reload retains saved answers and does not reset the timer. The browser reports tab visibility and fullscreen changes. Blur is logged as an informational signal. These browser signals cannot provide OS lockdown or independently prove that the student remained in fullscreen.

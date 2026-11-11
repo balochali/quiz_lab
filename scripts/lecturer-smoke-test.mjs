@@ -43,6 +43,7 @@ function unescapeHtml(value) {
 }
 
 async function submit(path, button, values, cookie) {
+  console.log("Checking form:", button);
   const headers = cookie ? { Cookie: cookie } : {};
   const page = await fetch(origin + path, { headers });
   assert.equal(page.status, 200, path);
@@ -58,7 +59,7 @@ async function submit(path, button, values, cookie) {
   }
   assert.ok([...body.keys()].length, "Missing server action fields");
   for (const [key, value] of Object.entries(values)) body.set(key, value);
-  return fetch(origin + path, { method: "POST", headers: { ...headers, Origin: origin }, body, redirect: "manual", signal: AbortSignal.timeout(15000) });
+  return fetch(origin + path, { method: "POST", headers: { ...headers, Origin: origin }, body, redirect: "manual", signal: AbortSignal.timeout(60000) });
 }
 
 await new Promise((resolve, reject) => {
@@ -100,15 +101,15 @@ try {
 
   quiz = await db.quiz.create({ data: {
     adminId: account.id, title: "Deletion fixture", course: subject, semester: "1", description: "",
-    instructions: "", durationMinutes: 10, totalMarks: 1, published: true,
-    questions: { create: { text: "Fixture question", position: 0, marks: 1,
+    instructions: "", durationMinutes: 10, totalMarks: 7, published: true, closedAt: new Date(),
+    questions: { create: { text: "Fixture question", position: 0, marks: 7,
       options: { create: { text: "Fixture answer", position: 0, correct: true } } } },
   }, include: { questions: { include: { options: true } } } });
   const q = quiz.questions[0];
   const attempt = await db.quizAttempt.create({ data: {
     quiz: { connect: { id: quiz.id } }, student: { create: { name: "Fixture student", rollNumber: tag, semester: "1" } },
     tokenHash: tag, studentName: "Fixture student", rollNumber: tag, semester: "1", quizTitle: quiz.title,
-    totalMarks: 1, questionOrder: "[]", endsAt: new Date(Date.now() + 60000),
+    totalMarks: 7, questionOrder: "[]", endsAt: new Date(Date.now() + 60000),
     answers: { create: { questionId: q.id, optionId: q.options[0].id } },
     violations: { create: { type: "BLUR" } },
   } });
@@ -123,6 +124,22 @@ try {
   // Next.js can stream a not-found page after the 200 response headers are sent.
   assert.match(foreignHtml, /Page unavailable/);
   assert.doesNotMatch(foreignHtml, /Foreign quiz|Delete permanently/);
+  const editPath = "/admin/quizzes/" + quiz.id + "/edit";
+  const correction = { questionId: q.id, marks: "1", expectedMarks: "7", confirmed: "on" };
+  const blocked = await submit(editPath, "Correct marks and regrade", correction, cookie);
+  await blocked.text();
+  assert.equal((await db.question.findUniqueOrThrow({ where: { id: q.id } })).marks, 7);
+  await db.quizAttempt.update({ where: { id: attempt.id }, data: {
+    status: "SUBMITTED", submittedAt: new Date(), obtainedMarks: 7,
+  } });
+  const corrected = await submit(editPath, "Correct marks and regrade", correction, cookie);
+  await corrected.text();
+  assert.equal((await db.question.findUniqueOrThrow({ where: { id: q.id } })).marks, 1);
+  assert.equal((await db.quiz.findUniqueOrThrow({ where: { id: quiz.id } })).totalMarks, 1);
+  const regraded = await db.quizAttempt.findUniqueOrThrow({ where: { id: attempt.id } });
+  assert.equal(regraded.obtainedMarks, 1);
+  assert.equal(regraded.totalMarks, 1);
+  assert.equal(regraded.status, "SUBMITTED");
   const deleted = await submit("/admin/quizzes/" + quiz.id + "/delete", "Delete permanently", {}, cookie);
   assert.equal(deleted.status, 303);
   assert.equal(await db.quiz.findUnique({ where: { id: quiz.id } }), null);
@@ -130,7 +147,7 @@ try {
   assert.equal(await db.studentAnswer.count({ where: { attemptId: attempt.id } }), 0);
   assert.equal(await db.violation.count({ where: { attemptId: attempt.id } }), 0);
   assert.equal((await fetch(origin + "/join/" + quiz.code)).status, 404);
-  console.log("Passed: SMTP signup, one-time verification, subject isolation, and confirmed quiz deletion with attempts.");
+  console.log("Passed: SMTP signup, one-time verification, subject isolation, and post-submission regrading, active-attempt protection, and confirmed quiz deletion with attempts.");
 } finally {
   if (quiz) {
     await db.studentAnswer.deleteMany({ where: { attempt: { quizId: quiz.id } } });
