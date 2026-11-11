@@ -63,12 +63,13 @@ export function Wizard({ subjects, initial, id, code, locked = false }: { subjec
     <header><Link href="/admin/quizzes">← Quiz library</Link><h1>{id ? quiz.title : "Create a quiz"}</h1>
       <p className="muted">Set up a single answer assessment for your class.</p></header>
     <nav className="wizard-steps" aria-label="Quiz setup">{steps.map((label, i) => <button key={label}
-      className={step === i ? "primary" : ""} aria-current={step === i ? "step" : undefined}
+      className={step === i ? "primary" : step > i ? "step-complete" : ""} aria-current={step === i ? "step" : undefined}
       onClick={() => { setStep(i); setPreview(false); }}>{i + 1}. {label}</button>)}</nav>
     {locked && <p className="notice">This quiz has attempts. Its questions and settings are locked.</p>}
     {publishedCode && savedId && <Link className="button" href={"/admin/quizzes/" + savedId + "/leaderboard"}>Results and leaderboard</Link>}
     <motion.section key={step} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="card stack">
-      <h2>{steps[step]}</h2>
+      <div className="row between"><div><p className="eyebrow">Step {step + 1} of 4</p><h2>{steps[step]}</h2></div><span className="badge">{Math.round((step + 1) / 4 * 100)}% through setup</span></div>
+      <progress aria-label="Quiz setup progress" value={step + 1} max={4} />
       <fieldset disabled={locked || busy} className="stack">
         {step === 0 && <>
           <div className="field-grid">

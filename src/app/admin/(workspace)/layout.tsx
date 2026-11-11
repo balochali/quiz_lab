@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { BookOpen, LayoutDashboard, ListChecks, ChartNoAxesColumn, LogOut, Zap } from "lucide-react";
+import { LogOut, Zap, Plus } from "lucide-react";
+import { WorkspaceNav } from "@/components/workspace-nav";
 import { requireAdmin } from "@/lib/auth";
 import { signOut } from "../actions";
 
@@ -9,12 +10,10 @@ export default async function Workspace({ children }: { children: React.ReactNod
     <aside className="sidebar">
       <Link href="/admin/dashboard" className="brand"><span><Zap size={20} /></span> QuizLab</Link>
       <p className="eyebrow">Lecturer workspace</p>
-      <nav className="stack">
-        <Link href="/admin/dashboard"><LayoutDashboard size={18} /> Overview</Link>
-        <Link href="/admin/subjects"><BookOpen size={18} /> Subjects</Link>
-        <Link href="/admin/quizzes"><ListChecks size={18} /> Quizzes</Link>
-        <Link href="/admin/results"><ChartNoAxesColumn size={18} /> Results</Link>
-      </nav>
+      <WorkspaceNav />
+      <div className="sidebar-prompt"><span className="eyebrow">Your next great quiz</span><p>A fresh challenge for your class.</p>
+        <Link href="/admin/quizzes/create" className="button primary"><Plus size={16} /> Create quiz</Link>
+      </div>
       <form action={signOut}><button className="quiet"><LogOut size={17} /> Sign out</button></form>
     </aside>
     <main className="workspace-main">{children}</main>

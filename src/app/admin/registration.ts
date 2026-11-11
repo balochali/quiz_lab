@@ -41,8 +41,10 @@ export async function requestVerification(_: string, form: FormData) {
       }
     }
     return confirmationMessage;
-  } catch {
-    return "Unable to request a confirmation email. Please try again.";
+  } catch (error) {
+    // Record only the error class/code. Connection strings and tokens must stay private.
+    console.error("Signup database operation failed", { code: (error as { code?: string })?.code ?? "unknown", name: error instanceof Error ? error.name : "unknown" });
+    return "Signup is temporarily unavailable. Please contact the administrator.";
   }
 }
 

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { BarChart3, BookOpen, Plus, Radio } from "lucide-react";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
+import { QuizArt } from "@/components/quiz-art";
 import { QuizList } from "@/components/quiz-list";
 
 export default async function Dashboard() {
@@ -19,11 +20,13 @@ export default async function Dashboard() {
     { Icon: BarChart3, value: attempts, label: "Student attempts" },
   ];
   return <>
-    <section className="hero row between wrap">
-      <div><p className="eyebrow">Assessment studio</p><h1>Lecturer overview</h1>
+    <section className="hero dashboard-hero row between wrap">
+      <div><p className="eyebrow">Assessment studio</p><h1>Make learning<br />a little more lively.</h1>
       <p>Build lab quizzes, share them with your class, and track results.</p></div>
+      <QuizArt />
       <Link className="button light" href="/admin/quizzes/create"><Plus size={19} /> Create new quiz</Link>
     </section>
+    <div className="row between wrap"><div><p className="eyebrow">Your workspace at a glance</p><h2>Ready for your next class?</h2></div><Link href="/admin/subjects">Explore your subjects →</Link></div>
     <section className="metrics">
       {metrics.map(({ Icon, value, label }) => (
         <article className="card metric" key={label}><Icon size={22} /><strong>{value}</strong><span>{label}</span></article>
