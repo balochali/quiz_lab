@@ -12,7 +12,7 @@ const cookieName = (id: string) => "attempt_" + id;
 const studentSchema = z.object({
   name: z.string().trim().min(1).max(150),
   rollNumber: z.string().trim().min(1).max(80).transform(value => value.toUpperCase()),
-  semester: z.string().trim().min(1).max(80),
+  semester: z.string().trim().regex(/^(?:[1-9]|1[0-9]|20)$/, "Enter only a semester number from 1 to 20, for example 3 or 6."),
 });
 export const eventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("ANSWER"), questionId: z.string(), optionId: z.string().optional(), textAnswer: z.string().max(12000).optional() }),
@@ -50,7 +50,7 @@ export async function settleExpired(adminId?: string) {
 
 export async function startAttempt(code: string, input: unknown) {
   const student = studentSchema.safeParse(input);
-  if (!student.success) return { error: "Enter your name, roll number and semester." };
+  if (!student.success) return { error: student.error.issues.find(issue => issue.path[0] === "semester")?.message ?? "Enter your name and roll number." };
   const token = randomBytes(32).toString("hex");
   const jar = await cookies();
   const result = await db.$transaction(async tx => {

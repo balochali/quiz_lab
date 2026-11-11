@@ -235,7 +235,7 @@ export function Exam({ quiz, initial }: { quiz?: JoinQuiz; initial?: Extract<Sta
     <form onSubmit={begin} className="stack">
       <label>Full name<input name="name" required maxLength={150} /></label>
       <label>Roll number<input name="rollNumber" required maxLength={80} /></label>
-      <label>Semester<input name="semester" required maxLength={80} /></label>
+      <label>Semester number<input name="semester" type="text" inputMode="numeric" pattern="([1-9]|1[0-9]|20)" required maxLength={2} placeholder="e.g. 3 or 6" title="Enter only a semester number from 1 to 20." onInput={event => { event.currentTarget.value = event.currentTarget.value.replace(/[^0-9]/g, ""); }} /><span className="studio-optional">Numbers only, for example 3 or 6. No need to type “semester”.</span></label>
       {error && <p role="alert" className="error">{error}</p>}
       <button disabled={busy} className="primary">{busy ? "Starting…" : "Start quiz"} <ArrowRight size={18} /></button>
     </form>
