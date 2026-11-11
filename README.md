@@ -75,7 +75,7 @@ The smoke test creates and removes its own quiz and attempts. For browser QA, pu
 
 Set the project Root Directory to quiz-platform if the Git repository includes its parent folder. The included vercel.json runs npm run vercel-build.
 
-Create a hosted PostgreSQL database (for example through Vercel's database integrations). Set DATABASE_URL to its PostgreSQL connection URL in Vercel's environment settings. Use a URL that supports migrations as well as Prisma queries. The build generates the PostgreSQL Prisma client and applies migrations from prisma/postgresql/migrations. Keep preview deployments connected to a separate preview database.
+Create a hosted PostgreSQL database (for example through Vercel's database integrations). Set DATABASE_URL to its PostgreSQL connection URL in Vercel's environment settings. The app also recognizes QUIZ_LAB_POSTGRES_URL (or QUIZ_LAB_PRISMA_DATABASE_URL) injected by the Prisma Postgres integration, during both installation and runtime. Use a URL that supports migrations as well as Prisma queries. The build generates the PostgreSQL Prisma client and applies migrations from prisma/postgresql/migrations. Keep preview deployments connected to a separate preview database.
 
 Also set SESSION_SECRET, SMTP_URL, SMTP_FROM, and APP_URL. APP_URL must be the public HTTPS origin, such as https://quizlab-e269.vercel.app. Vercel does not load your computer's .env file. Redeploy after changing these settings.
 

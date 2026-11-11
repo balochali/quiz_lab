@@ -1,6 +1,9 @@
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 
+import { configureDatabaseEnvironment } from "./database-env.mjs";
+
+configureDatabaseEnvironment();
 const hosted = process.env.VERCEL === "1";
 const postgres = hosted || /^postgres(ql)?:/.test(process.env.DATABASE_URL ?? "");
 if (hosted && !/^postgres(ql)?:/.test(process.env.DATABASE_URL ?? "")) {

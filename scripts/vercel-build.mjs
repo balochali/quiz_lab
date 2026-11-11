@@ -1,4 +1,7 @@
 import { spawnSync } from "node:child_process";
+import { configureDatabaseEnvironment } from "./database-env.mjs";
+
+configureDatabaseEnvironment();
 
 for (const name of ["SESSION_SECRET", "APP_URL", "SMTP_URL", "SMTP_FROM"]) {
   if (!process.env[name]) throw new Error("Missing Vercel environment variable: " + name);
