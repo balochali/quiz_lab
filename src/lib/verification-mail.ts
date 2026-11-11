@@ -2,14 +2,29 @@ import nodemailer from "nodemailer";
 
 export function verificationMailer() {
   const { SMTP_URL, SMTP_FROM, APP_URL } = process.env;
+  const missing = Object.entries({ SMTP_URL, SMTP_FROM, APP_URL })
+    .filter(([, value]) => !value?.trim()).map(([name]) => name);
+  if (missing.length) {
+    console.error("Email configuration invalid: missing variables", missing.join(", "));
+    return null;
+  }
   if (!SMTP_URL || !SMTP_FROM || !APP_URL) return null;
+  let setting = "APP_URL";
   try {
     const base = new URL(APP_URL);
     const local = ["localhost", "127.0.0.1", "[::1]"].includes(base.hostname);
-    if (base.protocol !== "https:" && !(local && base.protocol === "http:")) return null;
+    if (base.protocol !== "https:" && !(local && base.protocol === "http:")) {
+      console.error("Email configuration invalid: APP_URL requires HTTPS (HTTP allowed on localhost only)");
+      return null;
+    }
+    setting = "SMTP_URL";
     const smtp = new URL(SMTP_URL);
-    if (smtp.protocol !== "smtp:" && smtp.protocol !== "smtps:") return null;
+    if (smtp.protocol !== "smtp:" && smtp.protocol !== "smtps:") {
+      console.error("Email configuration invalid: SMTP_URL must start with smtp:// or smtps://");
+      return null;
+    }
     const localSmtp = ["localhost", "127.0.0.1", "[::1]"].includes(smtp.hostname);
+    setting = "SMTP transport";
     const transport = nodemailer.createTransport({
       url: SMTP_URL, requireTLS: smtp.protocol === "smtp:" && !localSmtp,
       connectionTimeout: 10000, greetingTimeout: 10000, socketTimeout: 15000,
@@ -24,6 +39,8 @@ export function verificationMailer() {
       });
     };
   } catch {
+    // Never log URL parser exceptions, which can contain the SMTP credentials.
+    console.error("Email configuration invalid: check", setting, "for surrounding quotes, a copied variable name, or malformed URL syntax");
     return null;
   }
 }
