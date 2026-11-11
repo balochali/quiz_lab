@@ -9,6 +9,12 @@ model Admin {
  id String @id @default(cuid())
  email String @unique
  passwordHash String
+ role String @default("LECTURER")
+ suspended Boolean @default(false)
+ canCreateQuizzes Boolean @default(true)
+ canPublishQuizzes Boolean @default(true)
+ canExportResults Boolean @default(true)
+ canCorrectMarks Boolean @default(true)
  verifiedAt DateTime?
  verificationHash String? @unique
  verificationExpiresAt DateTime?
@@ -59,6 +65,8 @@ model Question {
  quizId String
  quiz Quiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
  text String
+ type String @default("MCQ")
+ acceptedAnswers String @default("[]")
  position Int
  marks Int
  options Option[]
@@ -96,6 +104,7 @@ model QuizAttempt {
  quizTitle String
  totalMarks Int
  obtainedMarks Int @default(0)
+ gradingPending Boolean @default(false)
  status String @default("IN_PROGRESS")
  questionOrder String
  startedAt DateTime @default(now())
@@ -111,8 +120,10 @@ model StudentAnswer {
  attempt QuizAttempt @relation(fields: [attemptId], references: [id])
  questionId String
  question Question @relation(fields: [questionId], references: [id])
- optionId String
- option Option @relation(fields: [optionId], references: [id])
+ optionId String?
+ textAnswer String?
+ awardedMarks Int?
+ option Option? @relation(fields: [optionId], references: [id])
  updatedAt DateTime @updatedAt
  @@unique([attemptId, questionId])
 }

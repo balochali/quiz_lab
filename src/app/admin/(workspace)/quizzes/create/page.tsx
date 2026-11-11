@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { requireAdmin } from "@/lib/auth";
+import { requirePermission } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { Wizard } from "@/components/wizard";
 
 export default async function CreateQuiz() {
-  const adminId = await requireAdmin();
+  const adminId = await requirePermission("canCreateQuizzes");
   const subjects = await db.subject.findMany({ where: { adminId }, orderBy: { name: "asc" }, select: { name: true } });
   if (!subjects.length) return <section className="card stack">
     <h1>Create a quiz</h1>

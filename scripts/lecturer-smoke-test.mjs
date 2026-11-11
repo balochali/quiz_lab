@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:net";
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 
 const db = new PrismaClient();
@@ -89,9 +89,33 @@ try {
   assert.match(await reuse.text(), /expired, or already used/);
 
   const other = await db.admin.create({ data: {
-    email: otherEmail, passwordHash: "test-fixture", verifiedAt: new Date(),
+    email: otherEmail, passwordHash: "test-fixture", verifiedAt: new Date(), role: "SUPER_ADMIN",
     subjects: { create: { name: "Other private subject", nameKey: "other private subject" } },
   } });
+  const session = other.id + "." + (Date.now() + 60000);
+  const signature = createHmac("sha256", process.env.SESSION_SECRET).update(session).digest("hex");
+  const superCookie = "lecturer=" + session + "." + signature;
+  const restrictedPlatform = await fetch(origin + "/admin/platform", { headers: { Cookie: cookie } });
+  const restrictedPlatformHtml = await restrictedPlatform.text();
+  assert.ok(restrictedPlatform.url.endsWith("/admin/dashboard") || (restrictedPlatformHtml.includes("NEXT_REDIRECT") && restrictedPlatformHtml.includes("/admin/dashboard")));
+  assert.doesNotMatch(restrictedPlatformHtml, /Manage QuizLab/);
+  const adminPath = "/admin/platform/lecturers?" + new URLSearchParams({ q: email });
+  const permissions = { canPublishQuizzes: "on", canCorrectMarks: "on" };
+  const restricted = await submit(adminPath, "Save lecturer access", permissions, superCookie);
+  assert.equal(restricted.status, 303);
+  assert.equal((await db.admin.findUniqueOrThrow({ where: { id: account.id } })).canCreateQuizzes, false);
+  const blockedCreation = await fetch(origin + "/admin/quizzes/create", { headers: { Cookie: cookie } });
+  const blockedCreationHtml = await blockedCreation.text();
+  assert.ok(blockedCreation.url.endsWith("/admin/restricted") || (blockedCreationHtml.includes("NEXT_REDIRECT") && blockedCreationHtml.includes("/admin/restricted")));
+  assert.equal((await fetch(origin + "/api/admin/results", { headers: { Cookie: cookie } })).status, 403);
+  const suspended = await submit(adminPath, "Save lecturer access", { ...permissions, suspended: "on" }, superCookie);
+  assert.equal(suspended.status, 303);
+  const denied = await fetch(origin + "/admin/dashboard", { headers: { Cookie: cookie } });
+  const deniedHtml = await denied.text();
+  assert.ok(denied.url.endsWith("/admin/login") || (deniedHtml.includes("NEXT_REDIRECT") && deniedHtml.includes("/admin/login")));
+  const restored = await submit(adminPath, "Save lecturer access", { ...permissions, canCreateQuizzes: "on", canExportResults: "on" }, superCookie);
+  assert.equal(restored.status, 303);
+  assert.equal((await fetch(origin + "/api/admin/results", { headers: { Cookie: cookie } })).status, 200);
   const subjectPage = await fetch(origin + "/admin/subjects", { headers: { Cookie: cookie } });
   assert.doesNotMatch(await subjectPage.text(), /Other private subject/);
   const subject = "Test subject " + tag;
@@ -105,6 +129,13 @@ try {
     questions: { create: { text: "Fixture question", position: 0, marks: 7,
       options: { create: { text: "Fixture answer", position: 0, correct: true } } } },
   }, include: { questions: { include: { options: true } } } });
+  const library = await fetch(origin + "/admin/quizzes?" + new URLSearchParams({ subject }), { headers: { Cookie: cookie } });
+  const libraryHtml = await library.text();
+  assert.match(libraryHtml, /Deletion fixture/);
+  const unmatched = await fetch(origin + "/admin/quizzes?" + new URLSearchParams({ subject, q: "nonexistent-" + tag }), { headers: { Cookie: cookie } });
+  const unmatchedHtml = await unmatched.text();
+  assert.match(unmatchedHtml, /No quizzes match these filters/);
+  assert.doesNotMatch(unmatchedHtml, /Deletion fixture/);
   const q = quiz.questions[0];
   const attempt = await db.quizAttempt.create({ data: {
     quiz: { connect: { id: quiz.id } }, student: { create: { name: "Fixture student", rollNumber: tag, semester: "1" } },
@@ -147,7 +178,7 @@ try {
   assert.equal(await db.studentAnswer.count({ where: { attemptId: attempt.id } }), 0);
   assert.equal(await db.violation.count({ where: { attemptId: attempt.id } }), 0);
   assert.equal((await fetch(origin + "/join/" + quiz.code)).status, 404);
-  console.log("Passed: SMTP signup, one-time verification, subject isolation, and post-submission regrading, active-attempt protection, and confirmed quiz deletion with attempts.");
+  console.log("Passed: SMTP signup, one-time verification, subject isolation, and platform role isolation, suspension and feature permissions, post-submission regrading, active-attempt protection, and confirmed quiz deletion with attempts.");
 } finally {
   if (quiz) {
     await db.studentAnswer.deleteMany({ where: { attempt: { quizId: quiz.id } } });

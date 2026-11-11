@@ -27,6 +27,12 @@ npm run dev
 
 Open http://localhost:3000/admin/login. Add a subject, create a quiz, set its total to the sum of the question marks, publish it, and share the student link. To use it across a lab network, run on a reachable host and share its network URL instead of localhost. Use HTTPS with production mode, which sets Secure cookies.
 
+## Platform administration
+
+A SUPER_ADMIN account can access /admin/platform after signing in. It can list lecturers and their subjects and quiz counts, inspect every quiz and attempt, and view students. Lecturer controls support suspension and separate permissions for creating quizzes, publishing, CSV export, and regrading. Suspension blocks lecturer authentication and new student starts. Students already taking an exam retain their attempt timer.
+
+Provision the platform administrator with the existing create-admin script using ADMIN_ROLE=SUPER_ADMIN, ADMIN_EMAIL, and ADMIN_PASSWORD. Pass secrets through the environment or an ignored local file. On Vercel, set these three variables before deploying to provision the account during the build, then remove ADMIN_PASSWORD and ADMIN_ROLE after successful provisioning so subsequent builds do not reset the password. The role cannot be selected during public signup.
+
 ## Lecturer signup and subjects
 
 Self-service signup at /admin/signup requires these settings in .env:
@@ -46,6 +52,20 @@ Use Delete in the quiz library and confirm to remove a quiz and its attempts, re
 Pick a lab subject in Quiz information. In Publish, leave the opening time blank for immediate access or set a date and time in Pakistan time. The published link shows a countdown until then, and the server blocks early attempts. You can also set an optional link expiration in Pakistan time. To stop new attempts immediately, go to Quizzes → Link & leaderboard → Close link now. Students who have already started can finish within their original attempt time.
 
 In Settings, choose immediate scores after each attempt or manual release. Open the quiz’s Leaderboard from the quiz library to rank finalized attempts and release held scores. Students who keep their result page open see their individual score when it is released. The leaderboard is available only to the lecturer.
+
+## Existing live data during upgrades
+
+The question-format migration keeps existing questions as MCQs. Saved option IDs, attempt scores, quiz totals, statuses, and timestamps are preserved. Production upgrades use Prisma migrate deploy and the PostgreSQL migration history. Back up the live database and export the existing results before deploying a schema upgrade. scripts/migration-preservation-test.mjs verifies a historical MCQ dataset through the local migration and audits the production SQL. Live PostgreSQL migration has to be verified against your hosted database or a restored staging copy.
+
+Repeated Vercel admin-bootstrap runs preserve an already-verified platform admin account, including its password and suspension state.
+
+## Question formats
+
+The quiz-information step lets you choose a question count and MCQ, fill-in-the-blank, theory, or mixed format. Prepare the cards there or continue to the Questions step, then enter the question content. Mixed quizzes let you choose a format per question. Reducing the prepared count requires confirmation before unsaved cards are removed.
+
+MCQs use four options and one correct answer. Fill-in-the-blank questions accept one or more complete answer variants, one per line, compared on the server after ignoring case and extra spaces. Written/theory questions are graded by the lecturer under Results → individual attempt. Award whole-number marks up to each question maximum. Final scores remain hidden until all submitted written answers are graded and the quiz's release policy permits display. Pending grades are excluded from leaderboards and shown as pending in results/CSV.
+
+Student text answers are autosaved after typing pauses and when the field loses focus. Save answer can also be used explicitly. Existing MCQ quizzes and answer selections are retained by the migration.
 
 ## Correct marks after submissions
 

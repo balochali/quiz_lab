@@ -27,6 +27,62 @@ export function Exam({ quiz, initial }: { quiz?: JoinQuiz; initial?: Extract<Sta
   const ending = useRef(false);
   const pending = useRef<Promise<void>>(Promise.resolve());
   const requestInFlight = useRef(false);
+  const deferredText = useRef<{ questionId: string; value: string } | null>(null);
+  const failedAnswers = useRef(new Map<string, { value: string; text: boolean }>());
+  const textTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const writes = useRef(0);
+  const answerVersions = useRef(new Map<string, number>());
+  const queueAnswer = useCallback((questionId: string, value: string, text: boolean) => {
+    if (!attempt) return Promise.resolve();
+    const version = (answerVersions.current.get(questionId) ?? 0) + 1;
+    answerVersions.current.set(questionId, version);
+    failedAnswers.current.delete(questionId);
+    writes.current++;
+    setBusy(true);
+    pending.current = pending.current.then(async () => {
+      try {
+        const response = await fetch("/api/attempt/" + attempt.id, {
+          method: "POST", body: JSON.stringify({ type: "ANSWER", questionId, ...(text ? { textAnswer: value } : { optionId: value }) }),
+          headers: { "Content-Type": "application/json" }, keepalive: true,
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error);
+        if (result.status !== "IN_PROGRESS") window.location.replace("/quiz/" + attempt.id + "/result");
+        else {
+          if (!text) setAnswers(previous => ({ ...previous, [questionId]: value }));
+          if (answerVersions.current.get(questionId) === version) failedAnswers.current.delete(questionId);
+          if (!failedAnswers.current.size) setError("");
+        }
+      } catch {
+        if (answerVersions.current.get(questionId) === version) {
+          failedAnswers.current.set(questionId, { value, text });
+          setError("Answer was not confirmed. Check your connection and use Save answer to retry.");
+        }
+      } finally {
+        writes.current--;
+        setBusy(writes.current > 0 || deferredText.current !== null);
+      }
+    });
+    return pending.current;
+  }, [attempt]);
+  const flushText = useCallback(() => {
+    if (textTimer.current) clearTimeout(textTimer.current);
+    const draft = deferredText.current;
+    deferredText.current = null;
+    if (draft) void queueAnswer(draft.questionId, draft.value, true);
+    for (const [questionId, failed] of failedAnswers.current) {
+      if (questionId !== draft?.questionId) void queueAnswer(questionId, failed.value, failed.text);
+    }
+    return pending.current;
+  }, [queueAnswer]);
+  useEffect(() => {
+    function saveBeforeLeaving() { void flushText(); }
+    window.addEventListener("pagehide", saveBeforeLeaving);
+    return () => {
+      window.removeEventListener("pagehide", saveBeforeLeaving);
+      if (textTimer.current) clearTimeout(textTimer.current);
+    };
+  }, [flushText]);
   const remaining = attempt ? Math.max(0, Math.ceil((attempt.endsAt - clock - offset) / 1000)) : 0;
 
   const send = useCallback(async (type: Event, terminal = false) => {
@@ -39,7 +95,10 @@ export function Exam({ quiz, initial }: { quiz?: JoinQuiz; initial?: Extract<Sta
       }
     }
     try {
-      if (type === "SUBMIT" || type === "TIME") await pending.current;
+      if (type === "SUBMIT" || type === "TIME") {
+        await flushText();
+        if (failedAnswers.current.size) throw new Error("Pending answer was not saved");
+      } else if (terminal) void flushText();
       const response = await fetch("/api/attempt/" + attempt.id, {
         method: "POST", body: JSON.stringify({ type }), headers: { "Content-Type": "application/json" },
         keepalive: true,
@@ -60,7 +119,7 @@ export function Exam({ quiz, initial }: { quiz?: JoinQuiz; initial?: Extract<Sta
     } finally {
       if (terminal) requestInFlight.current = false;
     }
-  }, [attempt]);
+  }, [attempt, flushText]);
 
   useEffect(() => {
     if (!attempt?.policy || !ready) return;
@@ -96,7 +155,7 @@ export function Exam({ quiz, initial }: { quiz?: JoinQuiz; initial?: Extract<Sta
     if (!attempt) return;
     const timer = window.setInterval(() => setClock(Date.now()), 250);
     return () => window.clearInterval(timer);
-  }, [attempt]);
+  }, [attempt, flushText]);
 
   useEffect(() => {
     if (!attempt?.policy || remaining > 0 || ending.current || !attempt.policy.autoSubmit) return;
@@ -154,24 +213,15 @@ export function Exam({ quiz, initial }: { quiz?: JoinQuiz; initial?: Extract<Sta
 
   function choose(questionId: string, optionId: string) {
     if (!attempt || ending.current || busy) return;
+    void queueAnswer(questionId, optionId, false);
+  }
+  function typeAnswer(questionId: string, value: string) {
+    if (ending.current) return;
+    setAnswers(previous => ({ ...previous, [questionId]: value }));
+    deferredText.current = { questionId, value };
     setBusy(true);
-    setError("");
-    pending.current = (async () => {
-      try {
-        const response = await fetch("/api/attempt/" + attempt.id, {
-          method: "POST", body: JSON.stringify({ type: "ANSWER", questionId, optionId }),
-          headers: { "Content-Type": "application/json" }, keepalive: true,
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error);
-        if (result.status !== "IN_PROGRESS") window.location.replace("/quiz/" + attempt.id + "/result");
-        else setAnswers(previous => ({ ...previous, [questionId]: optionId }));
-      } catch {
-        setError("Answer was not confirmed. Select it again to retry.");
-      } finally {
-        setBusy(false);
-      }
-    })();
+    if (textTimer.current) clearTimeout(textTimer.current);
+    textTimer.current = setTimeout(() => void flushText(), 500);
   }
 
   if (!attempt && quiz) return <main className="narrow card">
@@ -205,7 +255,7 @@ export function Exam({ quiz, initial }: { quiz?: JoinQuiz; initial?: Extract<Sta
   const questions = attempt.questions ?? [];
   const question = questions[position];
   if (!question) return null;
-  const completed = Object.keys(answers).length;
+  const completed = Object.values(answers).filter(value => !!value.trim()).length;
   return <main className="exam">
     <div className="row between"><div><p className="eyebrow">Live assessment</p><h1>{attempt.title}</h1></div>
       <div className={remaining < 60 ? "timer urgent" : "timer"}><Clock size={18} />{Math.floor(remaining / 60)}:{String(remaining % 60).padStart(2, "0")}</div>
@@ -218,9 +268,16 @@ export function Exam({ quiz, initial }: { quiz?: JoinQuiz; initial?: Extract<Sta
     <motion.section key={question.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="card stack">
       <p className="eyebrow">Question {position + 1} of {questions.length} · {question.marks} marks</p>
       <h2 className="multiline">{question.text}</h2>
-      {question.options.map((option, index) => <button key={option.id} disabled={busy} aria-pressed={answers[question.id] === option.id}
+      {question.type === "MCQ" && question.options.map((option, index) => <button key={option.id} disabled={busy} aria-pressed={answers[question.id] === option.id}
         className={"option " + (answers[question.id] === option.id ? "selected" : "")} onClick={() => choose(question.id, option.id)}>
         <span>{String.fromCharCode(65 + index)}</span>{option.text}</button>)}
+      {question.type !== "MCQ" && <div className="stack">
+        <label>Your answer
+          {question.type === "THEORY" ? <textarea maxLength={12000} rows={8} value={answers[question.id] ?? ""} onChange={event => typeAnswer(question.id, event.target.value)} onBlur={() => void flushText()} /> :
+            <input maxLength={12000} value={answers[question.id] ?? ""} onChange={event => typeAnswer(question.id, event.target.value)} onBlur={() => void flushText()} />}
+        </label><div className="row wrap"><button onClick={() => void flushText()}>Save answer</button><span className="muted">{busy ? "Saving…" : "Answers save automatically"}</span></div>
+        {question.type === "THEORY" && <p className="notice">Your lecturer will grade this written answer after submission.</p>}
+      </div>}
       {error && <p role="alert" className="error">{error}</p>}
       <div className="row between wrap">
         <button disabled={position === 0} onClick={() => setPosition(position - 1)}><ArrowLeft size={17} /> Previous</button>

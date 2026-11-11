@@ -38,12 +38,26 @@ export async function adminId() {
   if (!signature || !/^\w+$/.test(id) || Number(expiry) <= Date.now() ||
     !Number.isFinite(Number(expiry)) || !/^[a-f0-9]{64}$/.test(signature) ||
     !equal(sign(id + "." + expiry), signature)) return null;
-  const account = await db.admin.findUnique({ where: { id }, select: { verifiedAt: true } });
-  return account?.verifiedAt ? id : null;
+  const account = await db.admin.findUnique({ where: { id }, select: { verifiedAt: true, suspended: true } });
+  return account?.verifiedAt && !account.suspended ? id : null;
 }
 
 export async function requireAdmin() {
   const id = await adminId();
   if (!id) redirect("/admin/login");
+  return id;
+}
+
+export async function requireSuperAdmin() {
+  const id = await requireAdmin();
+  const account = await db.admin.findUniqueOrThrow({ where: { id }, select: { role: true } });
+  if (account.role !== "SUPER_ADMIN") redirect("/admin/dashboard");
+  return id;
+}
+
+export async function requirePermission(permission: import("./permissions").LecturerPermission) {
+  const id = await requireAdmin();
+  const account = await db.admin.findUniqueOrThrow({ where: { id } });
+  if (account.role !== "SUPER_ADMIN" && !account[permission]) redirect("/admin/restricted");
   return id;
 }

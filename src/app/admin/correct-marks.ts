@@ -3,14 +3,14 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireAdmin } from "@/lib/auth";
+import { requirePermission } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { settleExpired } from "@/lib/attempt";
-import { calculateScore } from "@/lib/grading";
+import { gradeAttempt } from "@/lib/grading";
 import { quizLinkClosed } from "@/lib/quiz-schedule";
 
 export async function correctMarks(quizId: string, form: FormData) {
-  const adminId = await requireAdmin();
+  const adminId = await requirePermission("canCorrectMarks");
   const parsed = z.object({
     questionId: z.string().min(1),
     marks: z.coerce.number().int().min(1).max(1000),
@@ -41,14 +41,15 @@ export async function correctMarks(quizId: string, form: FormData) {
       const totalMarks = quiz.questions.reduce((sum, q) =>
         sum + (q.id === question.id ? parsed.data.marks : q.marks), 0);
       await tx.question.update({ where: { id: question.id }, data: { marks: parsed.data.marks } });
+      await tx.studentAnswer.updateMany({ where: { questionId: question.id, awardedMarks: { gt: parsed.data.marks } }, data: { awardedMarks: parsed.data.marks } });
       await tx.quiz.update({ where: { id: quizId }, data: { totalMarks } });
       const attempts = await tx.quizAttempt.findMany({
         where: { quizId },
-        select: { id: true, answers: { select: { option: { select: { correct: true } }, question: { select: { marks: true } } } } },
+        select: { id: true },
       });
       for (const attempt of attempts) {
         await tx.quizAttempt.update({ where: { id: attempt.id },
-          data: { totalMarks, obtainedMarks: calculateScore(attempt.answers) } });
+          data: { totalMarks, ...await gradeAttempt(tx, attempt.id) } });
       }
       return `Updated question marks from ${question.marks} to ${parsed.data.marks}. Regraded ${attempts.length} attempts. Quiz total is now ${totalMarks}.`;
     }, { timeout: 30000 });

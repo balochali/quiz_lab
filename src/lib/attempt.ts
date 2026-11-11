@@ -3,7 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { cookies } from "next/headers";
 import { z } from "zod";
 import { cookieOptions, hashToken } from "./auth";
-import { calculateScore } from "./grading";
+import { gradeAttempt } from "./grading";
 import { quizLinkClosed } from "./quiz-schedule";
 import { db } from "./db";
 
@@ -15,7 +15,7 @@ const studentSchema = z.object({
   semester: z.string().trim().min(1).max(80),
 });
 export const eventSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("ANSWER"), questionId: z.string(), optionId: z.string() }),
+  z.object({ type: z.literal("ANSWER"), questionId: z.string(), optionId: z.string().optional(), textAnswer: z.string().max(12000).optional() }),
   z.object({ type: z.enum(["SUBMIT", "TIME", "BLUR", "TAB_SWITCH", "FULLSCREEN_EXIT"]) }),
 ]);
 
@@ -29,18 +29,15 @@ function shuffled(ids: string[], enabled: boolean) {
 }
 
 async function finish(tx: Prisma.TransactionClient, id: string, status: string, submittedAt: Date) {
-  const answers = await tx.studentAnswer.findMany({
-    where: { attemptId: id }, select: { option: { select: { correct: true } }, question: { select: { marks: true } } },
-  });
-  const obtainedMarks = calculateScore(answers);
+  const grading = await gradeAttempt(tx, id);
   await tx.quizAttempt.updateMany({
     where: { id, status: IN_PROGRESS },
-    data: { status, obtainedMarks, submittedAt, activeKey: null },
+    data: { status, ...grading, submittedAt, activeKey: null },
   });
   return status;
 }
 
-export async function settleExpired(adminId: string) {
+export async function settleExpired(adminId?: string) {
   const now = new Date();
   await db.$transaction(async tx => {
     const expired = await tx.quizAttempt.findMany({
@@ -58,9 +55,9 @@ export async function startAttempt(code: string, input: unknown) {
   const jar = await cookies();
   const result = await db.$transaction(async tx => {
     // Serialize starts with closure and regrading so a new attempt cannot use stale marks.
-    await tx.quiz.updateMany({ where: { code, published: true }, data: { published: true } });
+    await tx.quiz.updateMany({ where: { code, published: true, admin: { suspended: false } }, data: { published: true } });
     const quiz = await tx.quiz.findUnique({
-      where: { code, published: true },
+      where: { code, published: true, admin: { suspended: false } },
       include: { questions: { orderBy: { position: "asc" }, include: { options: { orderBy: { position: "asc" }, select: { id: true } } } } },
     });
     if (!quiz || !quiz.questions.length) return { error: "This quiz is unavailable." };
@@ -113,9 +110,9 @@ export async function studentState(id: string) {
       include: {
         quiz: { select: {
           requireFullscreen: true, detectTabSwitch: true, terminateOnTabSwitch: true, autoSubmit: true, showResults: true, resultsReleasedAt: true,
-          questions: { select: { id: true, text: true, marks: true, options: { select: { id: true, text: true } } } },
+          questions: { select: { id: true, text: true, marks: true, type: true, options: { select: { id: true, text: true } } } },
         } },
-        answers: { select: { questionId: true, optionId: true } },
+        answers: { select: { questionId: true, optionId: true, textAnswer: true } },
       },
     });
     if (!attempt) return null;
@@ -123,16 +120,15 @@ export async function studentState(id: string) {
       ? await finish(tx, id, "EXPIRED", attempt.endsAt) : attempt.status;
     const base = { id, title: attempt.quizTitle, status, endsAt: attempt.endsAt.getTime(), serverNow: Date.now() };
     if (status !== IN_PROGRESS) {
-      const score = status === attempt.status ? attempt.obtainedMarks :
-        (await tx.quizAttempt.findUniqueOrThrow({ where: { id }, select: { obtainedMarks: true } })).obtainedMarks;
-      return { ...base, phase: "closed" as const, result: (attempt.quiz.showResults || attempt.quiz.resultsReleasedAt) ? { score, total: attempt.totalMarks } : null };
+      const graded = await tx.quizAttempt.findUniqueOrThrow({ where: { id }, select: { obtainedMarks: true, gradingPending: true } });
+      return { ...base, phase: "closed" as const, gradingPending: graded.gradingPending, result: !graded.gradingPending && (attempt.quiz.showResults || attempt.quiz.resultsReleasedAt) ? { score: graded.obtainedMarks, total: attempt.totalMarks } : null };
     }
     const { questions, requireFullscreen, detectTabSwitch, terminateOnTabSwitch, autoSubmit } = attempt.quiz;
     const policy = { requireFullscreen, detectTabSwitch, terminateOnTabSwitch, autoSubmit };
     const { order, optionOrders } = JSON.parse(attempt.questionOrder) as { order: string[]; optionOrders: Record<string, string[]> };
     const byId = new Map(questions.map(q => [q.id, q]));
     return {
-      ...base, phase: "active" as const, policy, answers: Object.fromEntries(attempt.answers.map(a => [a.questionId, a.optionId])),
+      ...base, phase: "active" as const, policy, answers: Object.fromEntries(attempt.answers.map(a => [a.questionId, a.optionId ?? a.textAnswer ?? ""])),
       questions: order.map(id => {
         const q = byId.get(id)!;
         return { ...q, options: optionOrders[id].map(id => q.options.find(o => o.id === id)!) };
@@ -151,14 +147,27 @@ export async function applyEvent(id: string, event: z.infer<typeof eventSchema>)
     const now = new Date();
     if (a.endsAt <= now) return { status: await finish(tx, id, "EXPIRED", a.endsAt) };
     if (event.type === "ANSWER") {
-      const option = await tx.option.findFirst({
-        where: { id: event.optionId, questionId: event.questionId, question: { quizId: a.quizId } },
-        select: { id: true },
-      });
-      if (!option) return { error: "This option does not belong to the question." };
+      const question = await tx.question.findFirst({ where: { id: event.questionId, quizId: a.quizId }, select: { id: true, type: true } });
+      if (!question) return { error: "Question not found in this quiz." };
+      let optionId: string | null = null;
+      let textAnswer: string | null = null;
+      if (question.type === "MCQ") {
+        if (!event.optionId) return { error: "Select one option." };
+        const option = await tx.option.findFirst({ where: { id: event.optionId, questionId: question.id }, select: { id: true } });
+        if (!option) return { error: "This option does not belong to the question." };
+        optionId = option.id;
+      } else {
+        if (typeof event.textAnswer !== "string") return { error: "Enter a text answer." };
+        textAnswer = event.textAnswer;
+        if (!textAnswer.trim()) {
+          await tx.studentAnswer.deleteMany({ where: { attemptId: id, questionId: question.id } });
+          return { status: IN_PROGRESS };
+        }
+      }
       await tx.studentAnswer.upsert({
-        where: { attemptId_questionId: { attemptId: id, questionId: event.questionId } },
-        update: { optionId: option.id }, create: { attemptId: id, questionId: event.questionId, optionId: option.id },
+        where: { attemptId_questionId: { attemptId: id, questionId: question.id } },
+        update: { optionId, textAnswer, awardedMarks: null },
+        create: { attemptId: id, questionId: question.id, optionId, textAnswer },
       });
     } else if (event.type === "SUBMIT") {
       return { status: await finish(tx, id, "SUBMITTED", now) };

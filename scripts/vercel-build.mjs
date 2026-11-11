@@ -18,11 +18,14 @@ if (publicUrl.protocol !== "https:") {
   console.error("Vercel APP_URL must start with https://");
   process.exit(1);
 }
+const bootstrap = process.env.ADMIN_ROLE === "SUPER_ADMIN";
+if (bootstrap && (!process.env.ADMIN_EMAIL || !process.env.ADMIN_PASSWORD)) throw new Error("Set ADMIN_EMAIL and ADMIN_PASSWORD for super admin provisioning");
 for (const args of [
   ["scripts/prisma-setup.mjs", "generate"],
   ["scripts/prisma-setup.mjs", "migrate"],
+  ...(bootstrap ? [["scripts/create-admin.mjs"]] : []),
   ["node_modules/next/dist/bin/next", "build", "--webpack"],
 ]) {
-  const result = spawnSync(process.execPath, args, { stdio: "inherit", env: { ...process.env, VERCEL: "1" } });
+  const result = spawnSync(process.execPath, args, { stdio: "inherit", env: { ...process.env, VERCEL: "1", ...(args[0] === "scripts/create-admin.mjs" ? { ADMIN_BOOTSTRAP: "1" } : {}) } });
   if (result.status !== 0) process.exit(result.status ?? 1);
 }

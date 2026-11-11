@@ -17,7 +17,7 @@ export async function findResults(adminId: string, filters: { q?: string; quiz?:
     where, orderBy: { startedAt: "desc" },
     select: {
       id: true, quizTitle: true, studentName: true, rollNumber: true, semester: true,
-      obtainedMarks: true, totalMarks: true, status: true, submittedAt: true,
+      obtainedMarks: true, totalMarks: true, gradingPending: true, status: true, submittedAt: true,
       _count: { select: { violations: true } },
     },
   });

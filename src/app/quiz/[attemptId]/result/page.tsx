@@ -11,8 +11,8 @@ export default async function Result({ params }: { params: Promise<{ attemptId: 
   return <main className="narrow card">
     <p className="eyebrow">Attempt complete</p><h1>{statusLabel(state.status)}</h1>
     <p>{state.title}</p>
-    <p>Your saved answers have been graded.</p>
-    {state.result ? <div className="score">{state.result.score} / {state.result.total}</div> : <AwaitingResults />}
+    <p>{state.gradingPending ? "Your answers have been submitted. Written responses are awaiting lecturer grading." : "Your saved answers have been graded."}</p>
+    {state.result ? <div className="score">{state.result.score} / {state.result.total}</div> : <AwaitingResults gradingPending={state.gradingPending} />}
   </main>;
 }
 

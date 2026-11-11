@@ -6,7 +6,7 @@ import { Exam } from "@/components/exam";
 
 export default async function Join({ params }: { params: Promise<{ quizCode: string }> }) {
   const { quizCode } = await params;
-  const quiz = await db.quiz.findUnique({ where: { code: quizCode, published: true }, select: {
+  const quiz = await db.quiz.findUnique({ where: { code: quizCode, published: true, admin: { suspended: false } }, select: {
     opensAt: true, expiresAt: true, closedAt: true, code: true, title: true, course: true, durationMinutes: true, instructions: true, description: true,
     requireFullscreen: true, detectTabSwitch: true, terminateOnTabSwitch: true, _count: { select: { questions: true } },
   } });

@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-export function AwaitingResults() {
+export function AwaitingResults({ gradingPending = false }: { gradingPending?: boolean }) {
   const router = useRouter();
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -19,5 +19,5 @@ export function AwaitingResults() {
     };
   }, [router]);
 
-  return <p className="notice" role="status">Your score will appear here when your lecturer releases results.</p>;
+  return <p className="notice" role="status">{gradingPending ? "Your written answers are awaiting lecturer grading. Your final result will appear when grading and release are complete." : "Your score will appear here when your lecturer releases results."}</p>;
 }

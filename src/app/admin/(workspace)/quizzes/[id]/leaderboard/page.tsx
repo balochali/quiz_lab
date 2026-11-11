@@ -18,7 +18,7 @@ export default async function Leaderboard({ params }: { params: Promise<{ id: st
   const linkClosed = quizLinkClosed(quiz);
   await settleExpired(adminId);
   const attempts = await db.quizAttempt.findMany({
-    where: { quizId: id, quiz: { adminId }, submittedAt: { not: null } },
+    where: { quizId: id, quiz: { adminId }, submittedAt: { not: null }, gradingPending: false },
     orderBy: [{ obtainedMarks: "desc" }, { submittedAt: "asc" }, { id: "asc" }],
     select: { id: true, studentName: true, rollNumber: true, obtainedMarks: true, totalMarks: true, status: true },
   });
@@ -56,7 +56,7 @@ export default async function Leaderboard({ params }: { params: Promise<{ id: st
     </section>
     <section className="card scroll stack">
       <h2>Rankings</h2>
-      <p className="muted">Best finalized attempt per roll number. Equal scores share a rank.</p>
+      <p className="muted">Best fully graded attempt per roll number. Equal scores share a rank.</p>
       {ranked.length ? <table>
         <thead><tr><th>Rank</th><th>Student</th><th>Roll number</th><th>Score</th><th>Status</th></tr></thead>
         <tbody>{ranked.map(attempt => <tr key={attempt.id}><td>{attempt.rank}</td>

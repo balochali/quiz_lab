@@ -11,12 +11,9 @@ export async function addSubject(_: string, form: FormData) {
   if (!name.success) return "Enter a subject name of 1 to 200 characters.";
   const nameKey = name.data.toLowerCase();
   try {
-    await db.subject.upsert({
-      where: { adminId_nameKey: { adminId, nameKey } },
-      create: { adminId, name: name.data, nameKey },
-      update: {},
-    });
-  } catch {
+    await db.subject.create({ data: { adminId, name: name.data, nameKey } });
+  } catch (error) {
+    if ((error as { code?: string })?.code === "P2002") return "This subject is already in your collection.";
     return "Unable to save the subject. Try again.";
   }
   redirect("/admin/subjects?added=1");

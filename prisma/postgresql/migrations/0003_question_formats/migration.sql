@@ -1,0 +1,6 @@
+ALTER TABLE "Question" ADD COLUMN "type" TEXT NOT NULL DEFAULT 'MCQ';
+ALTER TABLE "Question" ADD COLUMN "acceptedAnswers" TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE "QuizAttempt" ADD COLUMN "gradingPending" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "StudentAnswer" ALTER COLUMN "optionId" DROP NOT NULL;
+ALTER TABLE "StudentAnswer" ADD COLUMN "textAnswer" TEXT;
+ALTER TABLE "StudentAnswer" ADD COLUMN "awardedMarks" INTEGER;

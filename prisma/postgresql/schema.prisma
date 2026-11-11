@@ -9,6 +9,12 @@ model Admin {
  id String @id @default(cuid())
  email String @unique
  passwordHash String
+ role String @default("LECTURER")
+ suspended Boolean @default(false)
+ canCreateQuizzes Boolean @default(true)
+ canPublishQuizzes Boolean @default(true)
+ canExportResults Boolean @default(true)
+ canCorrectMarks Boolean @default(true)
  verifiedAt DateTime?
  verificationHash String? @unique
  verificationExpiresAt DateTime?
