@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import { ArrowLeft, ArrowRight, Clock, ShieldCheck } from "lucide-react";
+import { ArrowRight, Clock, ShieldCheck } from "lucide-react";
 import { CodeContent } from "./code-content";
 import { motion } from "framer-motion";
 import type { studentState } from "@/lib/attempt";
@@ -309,11 +309,11 @@ export function Exam({ quiz, initial }: { quiz?: JoinQuiz; initial?: Extract<Sta
       </div>}
       {error && <p role="alert" className="error">{error}</p>}
       <div className="row between wrap">
-        <button disabled={position === 0} onClick={() => setPosition(position - 1)}><ArrowLeft size={17} /> Previous</button>
-        <button disabled={position + 1 === questions.length} onClick={() => setPosition(position + 1)}>Next <ArrowRight size={17} /></button>
-        <button className="primary" disabled={busy} onClick={() => setConfirmSubmit(true)}>Submit quiz</button>
+        {position + 1 < questions.length
+          ? <button className="primary" disabled={busy} onClick={async () => { await flushText(); if (!failedAnswers.current.size) { setConfirmSubmit(false); setPosition(position + 1); } }}>Next <ArrowRight size={17} /></button>
+          : <button className="primary" disabled={busy} onClick={() => setConfirmSubmit(true)}>Submit quiz</button>}
       </div>
-      {confirmSubmit && <div className="notice stack" role="group" aria-label="Confirm submission">
+      {confirmSubmit && position + 1 === questions.length && <div className="notice stack" role="group" aria-label="Confirm submission">
         <p>Submit your quiz? You cannot change answers afterward.</p>
         <div className="row wrap">
           <button onClick={() => setConfirmSubmit(false)}>Keep working</button>
