@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { ArrowLeft, ArrowRight, Clock, ShieldCheck } from "lucide-react";
+import { CodeContent } from "./code-content";
 import { motion } from "framer-motion";
 import type { studentState } from "@/lib/attempt";
 
@@ -295,10 +296,10 @@ export function Exam({ quiz, initial }: { quiz?: JoinQuiz; initial?: Extract<Sta
     <motion.section key={question.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="card stack">
       <p className="eyebrow">Question {position + 1} of {questions.length} · {question.marks} marks</p>
       {questionSeconds != null && <div className={"question-countdown " + (questionSeconds === 0 ? "question-countdown-warning" : "")} role="status"><Clock size={20} /><strong>Question timer: {Math.floor(questionSeconds / 60)}:{String(questionSeconds % 60).padStart(2, "0")}</strong><span>{questionSeconds === 0 ? "Time is up. This answer is locked." : "Answers lock at zero. The timer continues when you leave this question."}</span></div>}
-      <h2 className="multiline">{question.text}</h2>
+      <h2 className="multiline"><CodeContent text={question.text} /></h2>
       {question.type === "MCQ" && question.options.map((option, index) => <button key={option.id} disabled={busy || questionLocked} aria-pressed={answers[question.id] === option.id}
         className={"option " + (answers[question.id] === option.id ? "selected" : "")} onClick={() => choose(question.id, option.id)}>
-        <span>{String.fromCharCode(65 + index)}</span>{option.text}</button>)}
+        <span>{String.fromCharCode(65 + index)}</span><CodeContent text={option.text} /></button>)}
       {question.type !== "MCQ" && <div className="stack">
         <label>Your answer
           {question.type === "THEORY" ? <textarea disabled={questionLocked} maxLength={12000} rows={8} value={answers[question.id] ?? ""} onChange={event => typeAnswer(question.id, event.target.value)} onBlur={() => void flushText()} /> :

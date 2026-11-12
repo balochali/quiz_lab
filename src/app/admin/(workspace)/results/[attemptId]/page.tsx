@@ -1,3 +1,4 @@
+import { CodeContent } from "@/components/code-content";
 import Link from "next/link";
 import { CheckCircle2, XCircle, Clock, MinusCircle, ShieldCheck } from "lucide-react";
 import { notFound } from "next/navigation";
@@ -47,9 +48,9 @@ export default async function Detail({ params, searchParams }: {
       const Icon = state === "correct" ? CheckCircle2 : state === "incorrect" ? XCircle : state === "unanswered" ? MinusCircle : Clock;
       return <article className={"question-editor stack answer-review answer-review-" + state} key={question.id}>
         <div className="row between wrap"><span className="answer-number">Question {index + 1}</span><span className="answer-outcome"><Icon size={17} />{label} · {pending ? "Not graded" : score + " / " + question.marks + " marks"}</span></div>
-        <div><p className="eyebrow">{questionTypes[question.type as keyof typeof questionTypes]}</p><h3>{index + 1}. {question.text}</h3></div>
-        <div className="answer-student multiline"><span className="eyebrow">Student answer</span><p>{answer?.option?.text ?? answer?.textAnswer ?? "Unanswered"}</p></div>
-        {question.type === "MCQ" && <p>Correct: {question.options.find(option => option.correct)?.text}</p>}
+        <div><p className="eyebrow">{questionTypes[question.type as keyof typeof questionTypes]}</p><h3>{index + 1}. <CodeContent text={question.text} /></h3></div>
+        <div className="answer-student multiline"><span className="eyebrow">Student answer</span><p><CodeContent text={answer?.option?.text ?? answer?.textAnswer ?? "Unanswered"} /></p></div>
+        {question.type === "MCQ" && <p>Correct: <CodeContent text={question.options.find(option => option.correct)?.text ?? ""} /></p>}
         {question.type === "BLANK" && <p>Accepted answers: {(JSON.parse(question.acceptedAnswers) as string[]).join(" / ")}</p>}
         <p>{question.type === "THEORY" && answer && answer.awardedMarks === null ? "Not graded" : score + " / " + question.marks + " marks"}</p>
         {question.type === "THEORY" && answer && attempt.status !== "IN_PROGRESS" && <form className="row wrap" action={gradeTheory.bind(null, attempt.id)}>

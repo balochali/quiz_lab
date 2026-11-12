@@ -21,6 +21,11 @@ try {
     questions: [{ text: "Question", options: ["A", "B", "C", "D"], correct: 0, marks: 1 }],
   };
   assert.deepEqual(getQuizIssues(valid, true), []);
+  const { quizSchema } = await import(pathToFileURL(join(directory, "quiz-schema.mjs")));
+  const code = "```python\nfor i in range(3):\n    print(i)\n```";
+  const codeQuiz = quizSchema.parse({ ...valid, questions: [{ ...valid.questions[0], text: "Read this code:\n" + code, options: [code, "    print('indented')\n", "C", "D"] }] });
+  assert.equal(codeQuiz.questions[0].options[0], code);
+  assert.equal(codeQuiz.questions[0].options[1], "    print('indented')\n");
   const timed = { ...valid, questions: [{ ...valid.questions[0], durationSeconds: 60 }], durationMinutes: 1 };
   assert.ok(getQuizIssues(timed, true).some(issue => issue.path === "durationMinutes"));
   assert.deepEqual(getQuizIssues({ ...timed, durationMinutes: 2 }, true), []);

@@ -9,6 +9,8 @@ import { questionTypes, settings, type QuizInput } from "@/lib/quiz-schema";
 import { formatQuizOpening, pakistanInputValue } from "@/lib/quiz-schedule";
 import { getQuizIssues, quizFieldId, type QuizIssue } from "@/lib/quiz-validation";
 import { SubjectPicker } from "./subject-picker";
+import { CodeEditor } from "./code-editor";
+import { CodeContent } from "./code-content";
 import { CopyLink } from "./copy-link";
 import { QuizSettings } from "./quiz-settings";
 
@@ -255,9 +257,9 @@ export function Wizard({ subjects, initial, id, code, locked = false }: { subjec
                   className={q.type === value ? "selected" : ""} aria-pressed={q.type === value}
                   onClick={() => change({ type: value as "MCQ" | "BLANK" | "THEORY" })}>{label}</button>)}
               </div>
-              <label>Question text<textarea {...fieldProps(`questions.${index}.text`)} placeholder="Write your question here…" value={q.text} onChange={e => change({ text: e.target.value })} />{fieldError(`questions.${index}.text`)}</label>
+              <label>Question text<CodeEditor {...fieldProps(`questions.${index}.text`)} placeholder="Write your question here…" value={q.text} onValueChange={text => change({ text })} />{fieldError(`questions.${index}.text`)}</label>
               {q.type === "MCQ" && <div className="field-grid answer-choice-grid" role="group" aria-label="Answer options and correct answer">{q.options.map((option, i) => <div className={"option-editor choice-card option-" + i + (q.correct === i ? " choice-card-correct" : "")} key={i}>
-                <label>Option {String.fromCharCode(65 + i)}<input {...fieldProps(`questions.${index}.options.${i}`)} value={option} onChange={e => change({ options: q.options.map((text, j) => j === i ? e.target.value : text) })} />{fieldError(`questions.${index}.options.${i}`)}</label>
+                <label>Option {String.fromCharCode(65 + i)}<CodeEditor variant="option" {...fieldProps(`questions.${index}.options.${i}`)} value={option} onValueChange={value => change({ options: q.options.map((text, j) => j === i ? value : text) })} />{fieldError(`questions.${index}.options.${i}`)}</label>
                 <button type="button" className={"choice-correct-button " + (q.correct === i ? "choice-correct-selected" : "")}
                   id={i === 0 ? quizFieldId(`questions.${index}.correct`) : undefined}
                   aria-pressed={q.correct === i} aria-label={"Set option " + String.fromCharCode(65 + i) + " as the correct answer"}
@@ -329,7 +331,7 @@ export function Wizard({ subjects, initial, id, code, locked = false }: { subjec
       </fieldset>
       {(step === 1 || step === 3) && <button className={step === 3 ? "publish-preview-button" : ""} aria-expanded={preview} onClick={() => setPreview(!preview)}><Eye size={17} />{preview ? "Close preview" : "Preview quiz"}</button>}
       {preview && <div className="notice stack">{quiz.questions.length ? quiz.questions.map((q, i) => step === 1 && i !== activeQuestion ? null : <div key={i}>
-        <strong>{i + 1}. {q.text}</strong><p className="muted">{questionTypes[q.type]}</p>{q.type === "MCQ" ? <ol type="A">{q.options.map((text, index) => <li key={index}>{text}</li>)}</ol> : <p className="notice">{q.type === "BLANK" ? "Student enters a short answer" : "Student writes an explanation"}</p>}
+        <strong>{i + 1}. <CodeContent text={q.text} /></strong><p className="muted">{questionTypes[q.type]}</p>{q.type === "MCQ" ? <ol type="A">{q.options.map((text, index) => <li key={index}><CodeContent text={text} /></li>)}</ol> : <p className="notice">{q.type === "BLANK" ? "Student enters a short answer" : "Student writes an explanation"}</p>}
       </div>) : <p>Add questions to see a preview.</p>}</div>}
       {notice && <p role="status" className="notice">{notice}</p>}
       {step === 3 && publishedCode && <CopyLink code={publishedCode} />}

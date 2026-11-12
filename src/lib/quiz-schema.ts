@@ -34,8 +34,8 @@ export const quizSchema = z.object({
   questions: z.array(z.object({
     type: z.enum(["MCQ", "BLANK", "THEORY"]).default("MCQ"),
     acceptedAnswers: z.array(z.string().max(1500)).max(30).transform(values => values.map(value => value.trim()).filter(Boolean)).default([]),
-    text: z.string().trim().min(1, "Enter the question text.").max(4000, "Use no more than 4000 characters."),
-    options: z.array(z.string().trim().max(1500, "Use no more than 1500 characters.")).max(4),
+    text: z.string().min(1, "Enter the question text.").refine(value => !!value.trim(), "Enter the question text.").max(4000, "Use no more than 4000 characters."),
+    options: z.array(z.string().max(1500, "Use no more than 1500 characters.")).max(4),
     correct: z.number().int().min(0, "Select one correct answer.").max(3, "Select one correct answer."),
     durationSeconds: z.number().int().min(1).max(21600).nullable().optional(),
     marks: z.number().int("Use whole-number marks.").min(1, "Assign at least 1 mark.").max(1000, "A question cannot exceed 1000 marks."),
