@@ -18,7 +18,7 @@ export default async function Join({ params }: { params: Promise<{ quizCode: str
     <p>New attempts are no longer accepted.</p>
   </main>;
   const opening = upcomingOpening(quiz.opensAt);
-  if (opening) return <WaitingRoom title={quiz.title} course={quiz.course} {...opening} />;
+  if (opening) return <WaitingRoom title={quiz.title} course={quiz.course} description={quiz.description} instructions={quiz.instructions} {...opening} />;
   const { opensAt, expiresAt, closedAt, ...availableQuiz } = quiz;
   void opensAt;
   void expiresAt;

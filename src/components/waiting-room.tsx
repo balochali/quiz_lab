@@ -3,9 +3,11 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatQuizOpening } from "@/lib/quiz-schedule";
+import { BookOpen, ClipboardList } from "lucide-react";
+import { CodeContent } from "./code-content";
 
-export function WaitingRoom({ title, course, opensAt, serverNow }: {
-  title: string; course: string; opensAt: number; serverNow: number;
+export function WaitingRoom({ title, course, opensAt, serverNow, description = "", instructions = "" }: {
+  title: string; course: string; opensAt: number; serverNow: number; description?: string; instructions?: string;
 }) {
   const router = useRouter();
   const [remaining, setRemaining] = useState(() => Math.ceil((opensAt - serverNow) / 1000));
@@ -37,5 +39,7 @@ export function WaitingRoom({ title, course, opensAt, serverNow }: {
       <p className="score" role="timer" aria-label="Time until quiz opens">{days > 0 && days + "d "}{clock}</p>
       <p>{remaining > 0 ? "Keep this page open. You can join when the quiz opens." : "Checking whether the quiz is open…"}</p>
     </div>
+    {description.trim() && <section className="waiting-reading waiting-description" aria-labelledby="waiting-description-heading"><h2 id="waiting-description-heading"><BookOpen size={21} /> About this quiz</h2><CodeContent text={description} /></section>}
+    {instructions.trim() && <section className="waiting-reading waiting-instructions" aria-labelledby="waiting-instructions-heading"><h2 id="waiting-instructions-heading"><ClipboardList size={21} /> Student instructions</h2><CodeContent text={instructions} /></section>}
   </main>;
 }
