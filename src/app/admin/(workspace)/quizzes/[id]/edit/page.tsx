@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
 import { CorrectMarks } from "@/components/correct-marks";
+import { draftSchema } from "@/lib/quiz-schema";
 import { Wizard } from "@/components/wizard";
 
 export default async function EditQuiz({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ correction?: string }> }) {
@@ -13,8 +14,9 @@ export default async function EditQuiz({ params, searchParams }: { params: Promi
   } });
   if (!quiz) notFound();
   const { id, code, published, questions, _count, ...fields } = quiz;
+  const draft = !published && quiz.draftData ? draftSchema.safeParse(JSON.parse(quiz.draftData)) : null;
   const subjects = await db.subject.findMany({ where: { adminId }, orderBy: { name: "asc" }, select: { name: true } });
-  return <>{typeof correction === "string" && <p className="notice" role="status">{correction.slice(0, 300)}</p>}<Wizard key={questions.map(q => q.id + ":" + q.marks).join("|")} subjects={subjects.map(subject => subject.name)} id={id} code={published ? code : undefined} locked={_count.attempts > 0} initial={{
+  return <>{typeof correction === "string" && <p className="notice" role="status">{correction.slice(0, 300)}</p>}<Wizard key={questions.map(q => q.id + ":" + q.marks).join("|")} subjects={subjects.map(subject => subject.name)} id={id} code={published ? code : undefined} locked={_count.attempts > 0} initial={draft?.success ? draft.data : {
     ...fields,
     opensAt: fields.opensAt?.toISOString() ?? null,
     expiresAt: fields.expiresAt?.toISOString() ?? null,

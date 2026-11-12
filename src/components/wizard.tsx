@@ -148,6 +148,7 @@ export function Wizard({ subjects, initial, id, code, locked = false }: { subjec
   return <div className="quiz-studio">
     <header className="studio-heading"><Link href="/admin/quizzes">← Quiz library</Link><h1>{id ? quiz.title : "Create a quiz"}</h1>
       <p className="muted">Turn your next lesson into a great challenge.</p><span className="studio-heading-tag"><Sparkles size={15} /> Quiz creation studio</span></header>
+    {!locked && <button type="button" disabled={busy} className="button" onClick={() => void persist(false)}><Save size={17} />{busy ? "Saving…" : "Save draft & continue later"}</button>}
     <nav className="studio-steps" aria-label="Quiz setup">{steps.map((label, i) => {
       const Icon = stepIcons[i];
       return <button key={label} className={"studio-step studio-step-" + i + (step === i ? " studio-step-active" : "")}

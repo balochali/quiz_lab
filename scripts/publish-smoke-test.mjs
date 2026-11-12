@@ -81,6 +81,16 @@ try {
   assert.match((await save(input, true)).error, /Publishing is disabled/);
   const draft = await save({ ...input, questions: [] }, false);
   assert.equal(draft.published, false);
+  const unfinished = { ...input, title: "", course: "", semester: "", durationMinutes: 0, totalMarks: 0, questions: [{ ...input.questions[0], text: "", options: ["", "  unfinished code\n", "", ""], marks: 1.5 }] };
+  const incompleteDraft = await save(unfinished, false);
+  assert.equal(incompleteDraft.published, false);
+  const storedDraft = await db.quiz.findUniqueOrThrow({ where: { id: incompleteDraft.id } });
+  const preserved = JSON.parse(storedDraft.draftData);
+  assert.equal(preserved.questions[0].marks, 1.5);
+  assert.equal(preserved.questions[0].options[1], "  unfinished code\n");
+  assert.equal(preserved.title, "");
+  const draftPage = await fetch(origin + "/admin/quizzes/" + storedDraft.id + "/edit", { headers: { Cookie: cookie } });
+  assert.equal(draftPage.status, 200);
   assert.match((await save(input, true, false)).error, /session has expired/);
   console.log("Passed: server field errors, marks mismatch, successful MCQ/mixed publishing, permissions, draft saving, and expired session feedback.");
 } finally {

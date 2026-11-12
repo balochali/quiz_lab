@@ -32,6 +32,7 @@ model Subject {
 }
 
 model Quiz {
+ draftData String?
  id String @id @default(cuid())
  code String @unique @default(cuid())
  adminId String

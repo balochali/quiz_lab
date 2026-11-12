@@ -47,6 +47,19 @@ export const quizSchema = z.object({
     if (question.type === "BLANK" && !question.acceptedAnswers.length) context.addIssue({ code: "custom", path: ["acceptedAnswers"], message: "Enter at least one accepted answer." });
   })).max(200),
 });
+// Drafts validate the payload structure, while allowing unfinished assessment content.
+const draftText = z.string().max(100000);
+const draftNumber = z.number().finite().nullable().transform(value => value ?? 0);
+export const draftSchema = quizSchema.extend({
+  title: draftText, course: draftText, semester: draftText, description: draftText, instructions: draftText,
+  durationMinutes: draftNumber, totalMarks: draftNumber,
+  opensAt: z.string().nullable(), expiresAt: z.string().nullable(),
+  questions: z.array(z.object({
+    type: z.enum(["MCQ", "BLANK", "THEORY"]).default("MCQ"), text: draftText,
+    acceptedAnswers: z.array(draftText).max(200).default([]), options: z.array(draftText).max(4),
+    correct: draftNumber, marks: draftNumber, durationSeconds: draftNumber.optional().nullable(),
+  })).max(200),
+});
 export type QuizInput = z.infer<typeof quizSchema>;
 export const statuses = {
   IN_PROGRESS: "In progress",

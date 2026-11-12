@@ -1,4 +1,4 @@
-import { quizSchema } from "./quiz-schema";
+import { quizSchema, draftSchema } from "./quiz-schema";
 
 export type QuizIssue = { path: string; label: string; message: string; step: number };
 const labels: Record<string, string> = {
@@ -10,7 +10,7 @@ const labels: Record<string, string> = {
 export function quizFieldId(path: string) { return "quiz-" + path.replaceAll(".", "-"); }
 
 export function getQuizIssues(input: unknown, publish: boolean): QuizIssue[] {
-  const parsed = quizSchema.safeParse(input);
+  const parsed = (publish ? quizSchema : draftSchema).safeParse(input);
   const issues: QuizIssue[] = parsed.success ? [] : parsed.error.issues.map(issue => {
     const path = issue.path.join(".");
     const questionIndex = typeof issue.path[1] === "number" ? issue.path[1] : null;
@@ -26,6 +26,7 @@ export function getQuizIssues(input: unknown, publish: boolean): QuizIssue[] {
     } else if (!Object.hasOwn(labels, String(issue.path[0]))) step = 2;
     return { path, label, step, message: issue.message };
   });
+  if (!publish) return issues;
   // Cross-field checks also run when some unrelated fields are invalid.
   const values = input && typeof input === "object" ? input as Record<string, unknown> : {};
   const schedule = quizSchema.pick({ opensAt: true, expiresAt: true }).safeParse(input);

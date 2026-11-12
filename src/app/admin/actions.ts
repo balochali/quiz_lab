@@ -6,7 +6,7 @@ import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { adminId as authenticatedAdminId, login, requireAdmin, verifyPassword } from "@/lib/auth";
 import { getQuizIssues } from "@/lib/quiz-validation";
-import { quizSchema } from "@/lib/quiz-schema";
+import { quizSchema, draftSchema } from "@/lib/quiz-schema";
 
 export async function signIn(_: string, form: FormData) {
   const email = String(form.get("email") ?? "").trim().toLowerCase();
@@ -70,22 +70,26 @@ export async function saveQuiz(id: string | undefined, input: unknown, publish: 
     }
     const issues = getQuizIssues(input, publish);
     if (issues.length) return { error: "Fix the highlighted quiz fields before " + (publish ? "publishing." : "saving."), issues };
-    const parsed = quizSchema.safeParse(input);
+    const parsed = (publish ? quizSchema : draftSchema).safeParse(input);
     if (!parsed.success) return { error: "The quiz data is invalid. Refresh the page and try again." };
     const { questions, opensAt, expiresAt, ...settings } = parsed.data;
+    const integer = (value: number) => Number.isSafeInteger(value) && Math.abs(value) <= 2147483647 ? value : 0;
     const fields = {
       ...settings,
-      opensAt: opensAt ? new Date(opensAt) : null,
-      expiresAt: expiresAt ? new Date(expiresAt) : null,
+      title: settings.title.trim() || "Untitled quiz",
+      durationMinutes: integer(settings.durationMinutes), totalMarks: integer(settings.totalMarks),
+      draftData: publish ? null : JSON.stringify(parsed.data),
+      opensAt: opensAt && Number.isFinite(Date.parse(opensAt)) ? new Date(opensAt) : null,
+      expiresAt: expiresAt && Number.isFinite(Date.parse(expiresAt)) ? new Date(expiresAt) : null,
     };
     const create = questions.map((question, position) => ({
-      text: question.text, type: question.type, acceptedAnswers: JSON.stringify(question.acceptedAnswers), marks: question.marks, durationSeconds: question.durationSeconds ?? null, position,
+      text: question.text, type: question.type, acceptedAnswers: JSON.stringify(question.acceptedAnswers), marks: integer(question.marks), durationSeconds: question.durationSeconds == null ? null : integer(question.durationSeconds), position,
       options: { create: question.type === "MCQ" ? question.options.map((text, index) => ({ text, position: index, correct: index === question.correct })) : [] },
     }));
     return await db.$transaction(async (tx) => {
       const subject = await tx.subject.findFirst({ where: { adminId, name: fields.course } });
-      if (!subject) return { error: "Select a subject from your lecturer workspace." };
-      fields.course = subject.name;
+      if (publish && !subject) return { error: "Select a subject from your lecturer workspace." };
+      fields.course = subject?.name ?? settings.course;
       if (id) {
         const existing = await tx.quiz.findFirst({ where: { id, adminId }, include: { _count: { select: { attempts: true } } } });
         if (!existing) return { error: "Quiz not found." };

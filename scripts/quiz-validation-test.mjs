@@ -21,6 +21,9 @@ try {
     questions: [{ text: "Question", options: ["A", "B", "C", "D"], correct: 0, marks: 1 }],
   };
   assert.deepEqual(getQuizIssues(valid, true), []);
+  const unfinished = { ...valid, title: "", course: "", semester: "", durationMinutes: 0, totalMarks: 0, questions: [{ ...valid.questions[0], text: "", marks: 1.5, options: ["", "unfinished", "", ""] }] };
+  assert.deepEqual(getQuizIssues(unfinished, false), []);
+  assert.ok(getQuizIssues(unfinished, true).length > 0);
   const { quizSchema } = await import(pathToFileURL(join(directory, "quiz-schema.mjs")));
   const code = "```python\nfor i in range(3):\n    print(i)\n```";
   const codeQuiz = quizSchema.parse({ ...valid, questions: [{ ...valid.questions[0], text: "Read this code:\n" + code, options: [code, "    print('indented')\n", "C", "D"] }] });
