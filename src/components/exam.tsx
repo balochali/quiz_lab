@@ -24,6 +24,31 @@ export function Exam({ quiz, initial }: { quiz?: JoinQuiz; initial?: Extract<Sta
   const [stopped, setStopped] = useState<Event | null>(null);
   const [clock, setClock] = useState(Date.now);
   const [offset, setOffset] = useState(() => initial ? initial.serverNow - Date.now() : 0);
+  const [questionDeadlines, setQuestionDeadlines] = useState<Record<string, number>>({});
+  const visibleQuestionId = attempt?.questions[position]?.id;
+  useEffect(() => {
+    if (!attempt || !ready || !visibleQuestionId) return;
+    let cancelled = false;
+    void fetch("/api/attempt/" + attempt.id, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "QUESTION_OPEN", questionId: visibleQuestionId }) }).then(async response => {
+      if (!response.ok) throw new Error();
+      const result = await response.json();
+      if (!cancelled && result.deadline) {
+        setQuestionDeadlines(previous => ({ ...previous, [visibleQuestionId]: result.deadline }));
+        setOffset(result.serverNow - Date.now());
+      }
+    }).catch(() => { if (!cancelled) setError("Unable to start question timer. Check your connection and reopen the question."); });
+    return () => { cancelled = true; };
+  }, [attempt, ready, visibleQuestionId]);
+  useEffect(() => {
+    if (!attempt || !ready || !visibleQuestionId || !questionDeadlines[visibleQuestionId] || clock + offset < questionDeadlines[visibleQuestionId]) return;
+    const advance = window.setTimeout(() => setPosition(current => {
+      for (let next = current + 1; next < attempt.questions.length; next++) {
+        if (!questionDeadlines[attempt.questions[next].id] || questionDeadlines[attempt.questions[next].id] > clock + offset) return next;
+      }
+      return current;
+    }), 0);
+    return () => window.clearTimeout(advance);
+  }, [attempt, ready, visibleQuestionId, questionDeadlines, clock, offset]);
   const ending = useRef(false);
   const pending = useRef<Promise<void>>(Promise.resolve());
   const requestInFlight = useRef(false);
@@ -255,8 +280,10 @@ export function Exam({ quiz, initial }: { quiz?: JoinQuiz; initial?: Extract<Sta
   const questions = attempt.questions ?? [];
   const question = questions[position];
   if (!question) return null;
+  const questionLocked = !!question.durationSeconds && (!questionDeadlines[question.id] || clock + offset >= questionDeadlines[question.id]);
   const completed = Object.values(answers).filter(value => !!value.trim()).length;
-  return <main className="exam">
+  const questionSeconds = question.durationSeconds && questionDeadlines[question.id] ? Math.max(0, Math.ceil((questionDeadlines[question.id] - clock - offset) / 1000)) : question.durationSeconds;
+  return <main className="exam exam-colorful">
     <div className="row between"><div><p className="eyebrow">Live assessment</p><h1>{attempt.title}</h1></div>
       <div className={remaining < 60 ? "timer urgent" : "timer"}><Clock size={18} />{Math.floor(remaining / 60)}:{String(remaining % 60).padStart(2, "0")}</div>
     </div>
@@ -267,14 +294,15 @@ export function Exam({ quiz, initial }: { quiz?: JoinQuiz; initial?: Extract<Sta
       aria-current={index === position ? "step" : undefined} onClick={() => setPosition(index)}>{index + 1}</button>)}</nav>
     <motion.section key={question.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="card stack">
       <p className="eyebrow">Question {position + 1} of {questions.length} · {question.marks} marks</p>
+      {questionSeconds != null && <div className={"question-countdown " + (questionSeconds === 0 ? "question-countdown-warning" : "")} role="status"><Clock size={20} /><strong>Question timer: {Math.floor(questionSeconds / 60)}:{String(questionSeconds % 60).padStart(2, "0")}</strong><span>{questionSeconds === 0 ? "Time is up. This answer is locked." : "Answers lock at zero. The timer continues when you leave this question."}</span></div>}
       <h2 className="multiline">{question.text}</h2>
-      {question.type === "MCQ" && question.options.map((option, index) => <button key={option.id} disabled={busy} aria-pressed={answers[question.id] === option.id}
+      {question.type === "MCQ" && question.options.map((option, index) => <button key={option.id} disabled={busy || questionLocked} aria-pressed={answers[question.id] === option.id}
         className={"option " + (answers[question.id] === option.id ? "selected" : "")} onClick={() => choose(question.id, option.id)}>
         <span>{String.fromCharCode(65 + index)}</span>{option.text}</button>)}
       {question.type !== "MCQ" && <div className="stack">
         <label>Your answer
-          {question.type === "THEORY" ? <textarea maxLength={12000} rows={8} value={answers[question.id] ?? ""} onChange={event => typeAnswer(question.id, event.target.value)} onBlur={() => void flushText()} /> :
-            <input maxLength={12000} value={answers[question.id] ?? ""} onChange={event => typeAnswer(question.id, event.target.value)} onBlur={() => void flushText()} />}
+          {question.type === "THEORY" ? <textarea disabled={questionLocked} maxLength={12000} rows={8} value={answers[question.id] ?? ""} onChange={event => typeAnswer(question.id, event.target.value)} onBlur={() => void flushText()} /> :
+            <input disabled={questionLocked} maxLength={12000} value={answers[question.id] ?? ""} onChange={event => typeAnswer(question.id, event.target.value)} onBlur={() => void flushText()} />}
         </label><div className="row wrap"><button onClick={() => void flushText()}>Save answer</button><span className="muted">{busy ? "Saving…" : "Answers save automatically"}</span></div>
         {question.type === "THEORY" && <p className="notice">Your lecturer will grade this written answer after submission.</p>}
       </div>}

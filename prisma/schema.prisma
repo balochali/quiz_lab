@@ -68,6 +68,7 @@ model Question {
  type String @default("MCQ")
  acceptedAnswers String @default("[]")
  position Int
+ durationSeconds Int?
  marks Int
  options Option[]
  answers StudentAnswer[]

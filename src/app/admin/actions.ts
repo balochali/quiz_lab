@@ -79,7 +79,7 @@ export async function saveQuiz(id: string | undefined, input: unknown, publish: 
       expiresAt: expiresAt ? new Date(expiresAt) : null,
     };
     const create = questions.map((question, position) => ({
-      text: question.text, type: question.type, acceptedAnswers: JSON.stringify(question.acceptedAnswers), marks: question.marks, position,
+      text: question.text, type: question.type, acceptedAnswers: JSON.stringify(question.acceptedAnswers), marks: question.marks, durationSeconds: question.durationSeconds ?? null, position,
       options: { create: question.type === "MCQ" ? question.options.map((text, index) => ({ text, position: index, correct: index === question.correct })) : [] },
     }));
     return await db.$transaction(async (tx) => {

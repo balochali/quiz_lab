@@ -34,6 +34,13 @@ export function getQuizIssues(input: unknown, publish: boolean): QuizIssue[] {
       Date.parse(schedule.data.expiresAt) <= Date.parse(schedule.data.opensAt)) {
     issues.push({ path: "expiresAt", label: "Link expiration", step: 3, message: "Choose a closing time after the quiz opens." });
   }
+  const timedQuestions = quizSchema.shape.questions.safeParse(values.questions);
+  if (timedQuestions.success) {
+    const seconds = timedQuestions.data.reduce((sum, q) => sum + (q.durationSeconds ?? 0), 0);
+    if (seconds > 0 && typeof values.durationMinutes === "number" && values.durationMinutes * 60 <= seconds) issues.push({ path: "durationMinutes", label: "Quiz duration", step: 0, message: `Quiz duration must exceed the combined question time (${seconds} seconds).` });
+    if (publish && seconds > 0 && schedule.success && !schedule.data.opensAt && schedule.data.expiresAt && Date.parse(schedule.data.expiresAt) - Date.now() <= seconds * 1000) issues.push({ path: "expiresAt", label: "Link availability", step: 3, message: "The link must remain open longer than the combined question time after publishing." });
+    if (seconds > 0 && schedule.success && schedule.data.opensAt && schedule.data.expiresAt && Date.parse(schedule.data.expiresAt) - Date.parse(schedule.data.opensAt) <= seconds * 1000) issues.push({ path: "expiresAt", label: "Link availability", step: 3, message: `The link must remain open longer than the combined question time (${seconds} seconds).` });
+  }
   if (publish) {
     const questions = quizSchema.shape.questions.safeParse(
       input && typeof input === "object" && "questions" in input ? input.questions : undefined);

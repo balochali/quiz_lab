@@ -18,7 +18,7 @@ export default async function EditQuiz({ params, searchParams }: { params: Promi
     ...fields,
     opensAt: fields.opensAt?.toISOString() ?? null,
     expiresAt: fields.expiresAt?.toISOString() ?? null,
-    questions: questions.map(q => ({ text: q.text, type: q.type as "MCQ" | "BLANK" | "THEORY", acceptedAnswers: JSON.parse(q.acceptedAnswers) as string[], marks: q.marks, options: q.type === "MCQ" ? q.options.map(o => o.text) : ["", "", "", ""], correct: Math.max(0, q.options.findIndex(o => o.correct)) })),
+    questions: questions.map(q => ({ text: q.text, type: q.type as "MCQ" | "BLANK" | "THEORY", acceptedAnswers: JSON.parse(q.acceptedAnswers) as string[], marks: q.marks, durationSeconds: q.durationSeconds, options: q.type === "MCQ" ? q.options.map(o => o.text) : ["", "", "", ""], correct: Math.max(0, q.options.findIndex(o => o.correct)) })),
   }} />
   {_count.attempts > 0 && <CorrectMarks quizId={id} questions={questions.map(q => ({ id: q.id, text: q.text, marks: q.marks }))} />}
   </>;

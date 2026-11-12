@@ -21,6 +21,11 @@ try {
     questions: [{ text: "Question", options: ["A", "B", "C", "D"], correct: 0, marks: 1 }],
   };
   assert.deepEqual(getQuizIssues(valid, true), []);
+  const timed = { ...valid, questions: [{ ...valid.questions[0], durationSeconds: 60 }], durationMinutes: 1 };
+  assert.ok(getQuizIssues(timed, true).some(issue => issue.path === "durationMinutes"));
+  assert.deepEqual(getQuizIssues({ ...timed, durationMinutes: 2 }, true), []);
+  assert.ok(getQuizIssues({ ...timed, durationMinutes: 2, opensAt: "2030-01-01T10:00:00.000Z", expiresAt: "2030-01-01T10:01:00.000Z" }, true).some(issue => issue.path === "expiresAt"));
+  assert.deepEqual(getQuizIssues({ ...timed, durationMinutes: 2, opensAt: "2030-01-01T10:00:00.000Z", expiresAt: "2030-01-01T10:02:00.000Z" }, true), []);
   const missingOption = structuredClone(valid);
   missingOption.questions[0].options[1] = "";
   const optionIssue = getQuizIssues(missingOption, true).find(issue => issue.path === "questions.0.options.1");

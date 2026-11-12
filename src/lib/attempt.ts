@@ -15,6 +15,7 @@ const studentSchema = z.object({
   semester: z.string().trim().regex(/^(?:[1-9]|1[0-9]|20)$/, "Enter only a semester number from 1 to 20, for example 3 or 6."),
 });
 export const eventSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("QUESTION_OPEN"), questionId: z.string() }),
   z.object({ type: z.literal("ANSWER"), questionId: z.string(), optionId: z.string().optional(), textAnswer: z.string().max(12000).optional() }),
   z.object({ type: z.enum(["SUBMIT", "TIME", "BLUR", "TAB_SWITCH", "FULLSCREEN_EXIT"]) }),
 ]);
@@ -110,7 +111,7 @@ export async function studentState(id: string) {
       include: {
         quiz: { select: {
           requireFullscreen: true, detectTabSwitch: true, terminateOnTabSwitch: true, autoSubmit: true, showResults: true, resultsReleasedAt: true,
-          questions: { select: { id: true, text: true, marks: true, type: true, options: { select: { id: true, text: true } } } },
+          questions: { select: { id: true, text: true, marks: true, durationSeconds: true, type: true, options: { select: { id: true, text: true } } } },
         } },
         answers: { select: { questionId: true, optionId: true, textAnswer: true } },
       },
@@ -141,11 +142,29 @@ export async function applyEvent(id: string, event: z.infer<typeof eventSchema>)
   const hash = await tokenHash(id);
   if (!hash) return null;
   return db.$transaction(async tx => {
+    await tx.quizAttempt.updateMany({ where: { id, tokenHash: hash, status: IN_PROGRESS }, data: { status: IN_PROGRESS } });
     const a = await tx.quizAttempt.findUnique({ where: { id, tokenHash: hash }, include: { quiz: true } });
     if (!a) return null;
     if (a.status !== IN_PROGRESS) return { status: a.status };
     const now = new Date();
     if (a.endsAt <= now) return { status: await finish(tx, id, "EXPIRED", a.endsAt) };
+    if (event.type === "QUESTION_OPEN" || event.type === "ANSWER") {
+      const timingQuestion = await tx.question.findFirst({ where: { id: event.questionId, quizId: a.quizId }, select: { durationSeconds: true } });
+      if (!timingQuestion) return { error: "Question not found." };
+      if (timingQuestion.durationSeconds) {
+        const timing = JSON.parse(a.questionOrder) as { deadlines?: Record<string, number> };
+        timing.deadlines ??= {};
+        let deadline = timing.deadlines[event.questionId];
+        if (!deadline && event.type === "QUESTION_OPEN") {
+          deadline = Math.min(a.endsAt.getTime(), Date.now() + timingQuestion.durationSeconds * 1000);
+          timing.deadlines[event.questionId] = deadline;
+          await tx.quizAttempt.update({ where: { id }, data: { questionOrder: JSON.stringify(timing) } });
+        }
+        if (event.type === "QUESTION_OPEN") return { status: IN_PROGRESS, deadline, serverNow: Date.now() };
+        if (!deadline || Date.now() >= deadline) return { error: "Question time has ended. This answer is locked." };
+      }
+      if (event.type === "QUESTION_OPEN") return { status: IN_PROGRESS, deadline: null, serverNow: Date.now() };
+    }
     if (event.type === "ANSWER") {
       const question = await tx.question.findFirst({ where: { id: event.questionId, quizId: a.quizId }, select: { id: true, type: true } });
       if (!question) return { error: "Question not found in this quiz." };

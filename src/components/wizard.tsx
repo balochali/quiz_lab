@@ -267,6 +267,7 @@ export function Wizard({ subjects, initial, id, code, locked = false }: { subjec
               {q.type === "BLANK" && <label>Accepted answers<textarea {...fieldProps(`questions.${index}.acceptedAnswers`)} placeholder="One accepted answer per line" value={q.acceptedAnswers.join("\n")} onChange={event => change({ acceptedAnswers: event.target.value.split("\n") })} />
                 <span className="studio-optional">Case and extra spaces are ignored. Enter a complete accepted answer on each line.</span>{fieldError(`questions.${index}.acceptedAnswers`)}</label>}
               {q.type === "THEORY" && <p className="notice">Students type a written answer. Review it in Results and award marks before final scores appear.</p>}
+              <label>Question time (seconds, optional)<input {...fieldProps(`questions.${index}.durationSeconds`)} type="number" min={1} max={21600} placeholder="e.g. 60" value={q.durationSeconds ?? ""} onChange={e => change({ durationSeconds: e.target.value ? Number(e.target.value) : null })} /><span className="studio-optional">Answers lock when time runs out and students move to the next question.</span>{fieldError(`questions.${index}.durationSeconds`)}</label>
               <label>Marks<input {...fieldProps(`questions.${index}.marks`)} type="number" min={1} max={1000} value={q.marks} onChange={e => change({ marks: Number(e.target.value) })} />{fieldError(`questions.${index}.marks`)}</label>
             </article>;
           })}

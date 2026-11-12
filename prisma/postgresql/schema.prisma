@@ -66,6 +66,7 @@ model Question {
  quiz Quiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
  text String
  position Int
+ durationSeconds Int?
  marks Int
  options Option[]
  answers StudentAnswer[]
