@@ -13,7 +13,7 @@ type JoinQuiz = {
   code: string; title: string; course: string; durationMinutes: number; instructions: string; description: string;
   requireFullscreen: boolean; detectTabSwitch: boolean; terminateOnTabSwitch: boolean; _count: { questions: number };
 };
-type Event = "SUBMIT" | "TIME" | "BLUR" | "TAB_SWITCH" | "FULLSCREEN_EXIT";
+type Event = "SUBMIT" | "TIME" | "BLUR" | "TAB_SWITCH" | "FULLSCREEN_EXIT" | "FULLSCREEN_RESTORED";
 
 export function Exam({ quiz, initial }: { quiz?: JoinQuiz; initial?: Extract<State, { phase: "active" }> }) {
   const [attempt, setAttempt] = useState(initial);
@@ -51,6 +51,10 @@ export function Exam({ quiz, initial }: { quiz?: JoinQuiz; initial?: Extract<Sta
     }), 0);
     return () => window.clearTimeout(advance);
   }, [attempt, ready, visibleQuestionId, questionDeadlines, clock, offset]);
+  const [fullscreenGrace, setFullscreenGrace] = useState<number | null>(initial?.fullscreenDeadline ?? null);
+  const graceRef = useRef<number | null>(initial?.fullscreenDeadline ?? null);
+  const fullscreenRequest = useRef<Promise<void>>(Promise.resolve());
+  const graceDialog = useRef<HTMLDialogElement>(null);
   const ending = useRef(false);
   const pending = useRef<Promise<void>>(Promise.resolve());
   const requestInFlight = useRef(false);
@@ -124,7 +128,7 @@ export function Exam({ quiz, initial }: { quiz?: JoinQuiz; initial?: Extract<Sta
     try {
       if (type === "SUBMIT" || type === "TIME") {
         await flushText();
-        if (failedAnswers.current.size) throw new Error("Pending answer was not saved");
+        if (type === "SUBMIT" && failedAnswers.current.size) throw new Error("Pending answer was not saved");
       } else if (terminal) void flushText();
       const response = await fetch("/api/attempt/" + attempt.id, {
         method: "POST", body: JSON.stringify({ type }), headers: { "Content-Type": "application/json" },
@@ -132,6 +136,11 @@ export function Exam({ quiz, initial }: { quiz?: JoinQuiz; initial?: Extract<Sta
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error);
+      if (result.fullscreenDeadline && graceRef.current) {
+        const deadline = Math.min(graceRef.current, result.fullscreenDeadline);
+        graceRef.current = deadline;
+        setFullscreenGrace(deadline);
+      }
       if (result.status !== "IN_PROGRESS") {
         ending.current = true;
         try { sessionStorage.removeItem("quiz-event-" + attempt.id); } catch { /* Storage can be unavailable in restricted browsers. */ }
@@ -151,19 +160,26 @@ export function Exam({ quiz, initial }: { quiz?: JoinQuiz; initial?: Extract<Sta
   useEffect(() => {
     if (!attempt?.policy || !ready) return;
     const policy = attempt.policy;
-    function end(type: Event) {
-      if (ending.current) return;
-      ending.current = true;
-      setStopped(type);
-      void send(type, true);
-    }
     function visibility() {
-      if (!document.hidden || !policy.detectTabSwitch) return;
-      if (policy.terminateOnTabSwitch) end("TAB_SWITCH");
+      if (!document.hidden || (!policy.detectTabSwitch && !graceRef.current)) return;
+      if (policy.terminateOnTabSwitch || graceRef.current) {
+        ending.current = true; setStopped("TAB_SWITCH");
+        void fullscreenRequest.current.then(() => send("TAB_SWITCH", true));
+      }
       else void send("TAB_SWITCH");
     }
     function fullscreen() {
-      if (!document.fullscreenElement && policy.requireFullscreen) end("FULLSCREEN_EXIT");
+      if (!policy.requireFullscreen || ending.current) return;
+      if (!document.fullscreenElement && !graceRef.current) {
+        const deadline = Date.now() + offset + 5000;
+        graceRef.current = deadline;
+        setFullscreenGrace(deadline);
+        fullscreenRequest.current = fullscreenRequest.current.then(() => send("FULLSCREEN_EXIT"));
+      } else if (document.fullscreenElement && graceRef.current) {
+        graceRef.current = null;
+        setFullscreenGrace(null);
+        fullscreenRequest.current = fullscreenRequest.current.then(() => send("FULLSCREEN_RESTORED"));
+      }
     }
     function blur() { void send("BLUR"); }
     document.addEventListener("visibilitychange", visibility);
@@ -176,7 +192,7 @@ export function Exam({ quiz, initial }: { quiz?: JoinQuiz; initial?: Extract<Sta
       document.removeEventListener("fullscreenchange", fullscreen);
       window.removeEventListener("blur", blur);
     };
-  }, [attempt, ready, send]);
+  }, [attempt, ready, send, offset]);
 
   useEffect(() => {
     if (!attempt) return;
@@ -188,6 +204,21 @@ export function Exam({ quiz, initial }: { quiz?: JoinQuiz; initial?: Extract<Sta
     if (!attempt?.policy || remaining > 0 || ending.current || !attempt.policy.autoSubmit) return;
     void send("TIME", true);
   }, [attempt, remaining, send]);
+
+  useEffect(() => {
+    const dialog = graceDialog.current;
+    if (fullscreenGrace && ready && !stopped && remaining > 0) { if (dialog && !dialog.open) dialog.showModal(); }
+    else dialog?.close();
+  }, [fullscreenGrace, ready, stopped, remaining]);
+  useEffect(() => {
+    if (!fullscreenGrace || clock + offset < fullscreenGrace || ending.current) return;
+    const timer = window.setTimeout(() => {
+      ending.current = true;
+      setStopped("FULLSCREEN_EXIT");
+      void fullscreenRequest.current.then(() => send("TIME", true));
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [fullscreenGrace, clock, offset, send]);
 
   async function begin(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
@@ -209,6 +240,7 @@ export function Exam({ quiz, initial }: { quiz?: JoinQuiz; initial?: Extract<Sta
         try { await document.documentElement.requestFullscreen(); }
         catch { throw new Error("Fullscreen is required. Enable fullscreen and try again."); }
       }
+      if (attempt?.fullscreenDeadline) { await send("FULLSCREEN_RESTORED"); graceRef.current = null; setFullscreenGrace(null); }
       if (quiz && data) {
         const response = await fetch("/api/join/" + quiz.code, { method: "POST", body: JSON.stringify(data), headers: { "Content-Type": "application/json" } });
         const result = await response.json();
@@ -256,7 +288,7 @@ export function Exam({ quiz, initial }: { quiz?: JoinQuiz; initial?: Extract<Sta
     <h1>{quiz.title}</h1><p>{quiz.course} · {quiz.durationMinutes} min · {quiz._count.questions} questions</p>
     <QuizMarkdown text={quiz.description} />
     <aside className="notice"><strong>Before you start</strong><QuizMarkdown text={quiz.instructions} />
-      {quiz.requireFullscreen && <p>Exiting fullscreen ends your attempt.</p>}
+      {quiz.requireFullscreen && <p>If you exit fullscreen, return within 5 seconds. Switching tabs during that warning ends your attempt immediately.</p>}
       {quiz.detectTabSwitch && quiz.terminateOnTabSwitch && <p>Switching tabs ends your attempt.</p>}
     </aside>
     <form onSubmit={begin} className="stack">
@@ -294,6 +326,16 @@ export function Exam({ quiz, initial }: { quiz?: JoinQuiz; initial?: Extract<Sta
     <nav className="row wrap" aria-label="Questions">{questions.map((q, index) => <button key={q.id}
       className={index === position ? "primary" : answers[q.id] ? "selected" : ""}
       aria-current={index === position ? "step" : undefined} onClick={() => setPosition(index)}>{index + 1}</button>)}</nav>
+    <dialog ref={graceDialog} className="fullscreen-grace-modal" onCancel={event => event.preventDefault()} aria-labelledby="fullscreen-warning-title" aria-describedby="fullscreen-warning-description">
+      <ShieldCheck size={36} /><h2 id="fullscreen-warning-title">Return to fullscreen</h2>
+      <p id="fullscreen-warning-description">Your quiz will terminate unless you return within 5 seconds. Switching tabs now will terminate it immediately.</p>
+      <strong className="fullscreen-grace-count" role="timer" aria-label="Seconds to return to fullscreen">{Math.max(0, Math.ceil(((fullscreenGrace ?? 0) - clock - offset) / 1000))}</strong>
+      <button type="button" className="primary" autoFocus onClick={async () => {
+        try { await document.documentElement.requestFullscreen(); }
+        catch { setError("Fullscreen was blocked. Use the return button before time runs out."); }
+      }}>Return to fullscreen</button>
+      {error && <p role="alert">{error}</p>}
+    </dialog>
     <motion.section key={question.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="card stack">
       <p className="eyebrow">Question {position + 1} of {questions.length} · {question.marks} marks</p>
       {questionSeconds != null && <div className={"question-countdown " + (questionSeconds === 0 ? "question-countdown-warning" : "")} role="status"><Clock size={20} /><strong>Question timer: {Math.floor(questionSeconds / 60)}:{String(questionSeconds % 60).padStart(2, "0")}</strong><span>{questionSeconds === 0 ? "Time is up. This answer is locked." : "Answers lock at zero. The timer continues when you leave this question."}</span></div>}

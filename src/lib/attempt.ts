@@ -8,6 +8,7 @@ import { quizLinkClosed } from "./quiz-schedule";
 import { db } from "./db";
 
 const IN_PROGRESS = "IN_PROGRESS";
+const fullscreenDeadline = (order: string): number | null => JSON.parse(order).fullscreenDeadline ?? null;
 const cookieName = (id: string) => "attempt_" + id;
 const studentSchema = z.object({
   name: z.string().trim().min(1).max(150),
@@ -17,7 +18,7 @@ const studentSchema = z.object({
 export const eventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("QUESTION_OPEN"), questionId: z.string() }),
   z.object({ type: z.literal("ANSWER"), questionId: z.string(), optionId: z.string().optional(), textAnswer: z.string().max(12000).optional() }),
-  z.object({ type: z.enum(["SUBMIT", "TIME", "BLUR", "TAB_SWITCH", "FULLSCREEN_EXIT"]) }),
+  z.object({ type: z.enum(["SUBMIT", "TIME", "BLUR", "TAB_SWITCH", "FULLSCREEN_EXIT", "FULLSCREEN_RESTORED"]) }),
 ]);
 
 function shuffled(ids: string[], enabled: boolean) {
@@ -42,10 +43,14 @@ export async function settleExpired(adminId?: string) {
   const now = new Date();
   await db.$transaction(async tx => {
     const expired = await tx.quizAttempt.findMany({
-      where: { status: IN_PROGRESS, endsAt: { lte: now }, quiz: { adminId } },
-      select: { id: true, endsAt: true },
+      where: { status: IN_PROGRESS, quiz: { adminId } },
+      select: { id: true, endsAt: true, questionOrder: true },
     });
-    for (const attempt of expired) await finish(tx, attempt.id, "EXPIRED", attempt.endsAt);
+    for (const attempt of expired) {
+      const grace = fullscreenDeadline(attempt.questionOrder);
+      if (attempt.endsAt <= now) await finish(tx, attempt.id, "EXPIRED", attempt.endsAt);
+      else if (grace && grace <= now.getTime()) await finish(tx, attempt.id, "FULLSCREEN_EXIT", new Date(grace));
+    }
   });
 }
 
@@ -117,7 +122,9 @@ export async function studentState(id: string) {
       },
     });
     if (!attempt) return null;
-    const status = attempt.status === IN_PROGRESS && attempt.endsAt.getTime() <= Date.now()
+    const grace = fullscreenDeadline(attempt.questionOrder);
+    const status = attempt.status === IN_PROGRESS && grace && grace <= Date.now()
+      ? await finish(tx, id, "FULLSCREEN_EXIT", new Date(grace)) : attempt.status === IN_PROGRESS && attempt.endsAt.getTime() <= Date.now()
       ? await finish(tx, id, "EXPIRED", attempt.endsAt) : attempt.status;
     const base = { id, title: attempt.quizTitle, status, endsAt: attempt.endsAt.getTime(), serverNow: Date.now() };
     if (status !== IN_PROGRESS) {
@@ -129,7 +136,7 @@ export async function studentState(id: string) {
     const { order, optionOrders } = JSON.parse(attempt.questionOrder) as { order: string[]; optionOrders: Record<string, string[]> };
     const byId = new Map(questions.map(q => [q.id, q]));
     return {
-      ...base, phase: "active" as const, policy, answers: Object.fromEntries(attempt.answers.map(a => [a.questionId, a.optionId ?? a.textAnswer ?? ""])),
+      ...base, phase: "active" as const, fullscreenDeadline: grace, policy, answers: Object.fromEntries(attempt.answers.map(a => [a.questionId, a.optionId ?? a.textAnswer ?? ""])),
       questions: order.map(id => {
         const q = byId.get(id)!;
         return { ...q, options: optionOrders[id].map(id => q.options.find(o => o.id === id)!) };
@@ -147,6 +154,21 @@ export async function applyEvent(id: string, event: z.infer<typeof eventSchema>)
     if (!a) return null;
     if (a.status !== IN_PROGRESS) return { status: a.status };
     const now = new Date();
+    const grace = fullscreenDeadline(a.questionOrder);
+    if (grace && grace <= now.getTime()) return { status: await finish(tx, id, "FULLSCREEN_EXIT", new Date(grace)) };
+    if (event.type === "FULLSCREEN_RESTORED") {
+      const order = JSON.parse(a.questionOrder);
+      delete order.fullscreenDeadline;
+      await tx.quizAttempt.update({ where: { id }, data: { questionOrder: JSON.stringify(order) } });
+      return { status: IN_PROGRESS };
+    }
+    if (event.type === "FULLSCREEN_EXIT" && a.quiz.requireFullscreen) {
+      const order = JSON.parse(a.questionOrder);
+      order.fullscreenDeadline ??= now.getTime() + 5000;
+      await tx.quizAttempt.update({ where: { id }, data: { questionOrder: JSON.stringify(order) } });
+      if (!grace) await tx.violation.create({ data: { attemptId: id, type: "FULLSCREEN_EXIT", createdAt: now } });
+      return { status: IN_PROGRESS, fullscreenDeadline: order.fullscreenDeadline };
+    }
     if (a.endsAt <= now) return { status: await finish(tx, id, "EXPIRED", a.endsAt) };
     if (event.type === "QUESTION_OPEN" || event.type === "ANSWER") {
       const timingQuestion = await tx.question.findFirst({ where: { id: event.questionId, quizId: a.quizId }, select: { durationSeconds: true } });
@@ -190,10 +212,10 @@ export async function applyEvent(id: string, event: z.infer<typeof eventSchema>)
       });
     } else if (event.type === "SUBMIT") {
       return { status: await finish(tx, id, "SUBMITTED", now) };
-    } else if (event.type === "BLUR" || (event.type === "TAB_SWITCH" && a.quiz.detectTabSwitch) ||
+    } else if (event.type === "BLUR" || (event.type === "TAB_SWITCH" && (a.quiz.detectTabSwitch || !!grace)) ||
       (event.type === "FULLSCREEN_EXIT" && a.quiz.requireFullscreen)) {
       await tx.violation.create({ data: { attemptId: id, type: event.type, createdAt: now } });
-      if (event.type === "FULLSCREEN_EXIT" || (event.type === "TAB_SWITCH" && a.quiz.terminateOnTabSwitch)) {
+      if (event.type === "FULLSCREEN_EXIT" || (event.type === "TAB_SWITCH" && (a.quiz.terminateOnTabSwitch || !!grace))) {
         return { status: await finish(tx, id, event.type, now) };
       }
     }

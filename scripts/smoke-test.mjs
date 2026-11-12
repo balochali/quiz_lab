@@ -79,7 +79,12 @@ try {
   assert.equal((await call(secondPath, undefined, second.cookie)).data.result.score, 0);
 
   const third = await call(join, { ...student, rollNumber: tag + "-fullscreen" });
-  assert.equal((await call("/api/attempt/" + third.data.id, { type: "FULLSCREEN_EXIT" }, third.cookie)).data.status, "FULLSCREEN_EXIT");
+  assert.equal((await call("/api/attempt/" + third.data.id, { type: "FULLSCREEN_EXIT" }, third.cookie)).data.status, "IN_PROGRESS");
+  const fullscreenAttempt = await db.quizAttempt.findUniqueOrThrow({ where: { id: third.data.id } });
+  const fullscreenOrder = JSON.parse(fullscreenAttempt.questionOrder);
+  fullscreenOrder.fullscreenDeadline = Date.now() - 1;
+  await db.quizAttempt.update({ where: { id: third.data.id }, data: { questionOrder: JSON.stringify(fullscreenOrder) } });
+  assert.equal((await call("/api/attempt/" + third.data.id, { type: "TIME" }, third.cookie)).data.status, "FULLSCREEN_EXIT");
   const exportPath = "/api/admin/results?quiz=" + quiz.id + "&status=TAB_SWITCH";
   assert.equal((await fetch(origin + exportPath)).status, 401);
   const session = admin.id + "." + (Date.now() + 60000);
