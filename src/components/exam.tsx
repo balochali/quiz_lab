@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { ArrowRight, Clock, ShieldCheck } from "lucide-react";
+import { QuizMarkdown } from "./quiz-markdown";
 import { CodeContent } from "./code-content";
 import { motion } from "framer-motion";
 import type { studentState } from "@/lib/attempt";
@@ -253,8 +254,8 @@ export function Exam({ quiz, initial }: { quiz?: JoinQuiz; initial?: Extract<Sta
   if (!attempt && quiz) return <main className="narrow card">
     <p className="eyebrow"><ShieldCheck size={17} /> Student assessment</p>
     <h1>{quiz.title}</h1><p>{quiz.course} · {quiz.durationMinutes} min · {quiz._count.questions} questions</p>
-    <p className="multiline">{quiz.description}</p>
-    <aside className="notice"><strong>Before you start</strong><p className="multiline">{quiz.instructions}</p>
+    <QuizMarkdown text={quiz.description} />
+    <aside className="notice"><strong>Before you start</strong><QuizMarkdown text={quiz.instructions} />
       {quiz.requireFullscreen && <p>Exiting fullscreen ends your attempt.</p>}
       {quiz.detectTabSwitch && quiz.terminateOnTabSwitch && <p>Switching tabs ends your attempt.</p>}
     </aside>
