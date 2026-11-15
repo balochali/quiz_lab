@@ -59,6 +59,8 @@ The question-format migration keeps existing questions as MCQs. Saved option IDs
 
 Repeated Vercel admin-bootstrap runs preserve an already-verified platform admin account, including its password and suspension state.
 
+If the production administrator password does not work, set `ADMIN_ROLE=SUPER_ADMIN`, `ADMIN_EMAIL`, and `ADMIN_PASSWORD` in the Vercel Production environment. Also set `ADMIN_RESET_PASSWORD=1` for one deployment. Redeploy the version containing this reset option. It creates the account if absent or replaces the password of an existing verified super admin without changing its suspension state or permissions. Remove `ADMIN_RESET_PASSWORD` after the successful deployment so later deployments preserve the password. Quiz, student, and attempt data are not modified by password provisioning. Sign in at `/admin/login`.
+
 ## Question formats
 
 The quiz-information step lets you choose a question count and MCQ, fill-in-the-blank, theory, or mixed format. Prepare the cards there or continue to the Questions step, then enter the question content. Mixed quizzes let you choose a format per question. Reducing the prepared count requires confirmation before unsaved cards are removed.

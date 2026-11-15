@@ -5,6 +5,8 @@ import { randomBytes, scryptSync } from "node:crypto";
 configureDatabaseEnvironment();
 const role = process.env.ADMIN_ROLE ?? "LECTURER";
 if (!["LECTURER", "SUPER_ADMIN"].includes(role)) throw new Error("ADMIN_ROLE must be LECTURER or SUPER_ADMIN");
+const resetPassword = process.env.ADMIN_RESET_PASSWORD === "1";
+if (resetPassword && role !== "SUPER_ADMIN") throw new Error("ADMIN_RESET_PASSWORD requires ADMIN_ROLE=SUPER_ADMIN");
 const email = process.env.ADMIN_EMAIL?.trim().toLowerCase();
 const password = process.env.ADMIN_PASSWORD;
 if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !password || password.length < 12 || password.length > 256) {
@@ -17,7 +19,12 @@ const db = new PrismaClient();
 try {
   const existing = await db.admin.findUnique({ where: { email }, select: { role: true, verifiedAt: true } });
   if (process.env.ADMIN_BOOTSTRAP === "1" && existing?.role === "SUPER_ADMIN" && existing.verifiedAt) {
-    console.log("Platform administrator already provisioned. Existing account preserved.");
+    if (resetPassword) {
+      await db.admin.update({ where: { email }, data: { passwordHash } });
+      console.log("Platform administrator password updated. Existing account settings preserved. Remove ADMIN_RESET_PASSWORD after deployment.");
+    } else {
+      console.log("Platform administrator already provisioned. Existing account preserved. To replace its password, explicitly set ADMIN_RESET_PASSWORD=1 for one deployment.");
+    }
   } else {
   await db.admin.upsert({ where: { email }, create: { email, passwordHash, role, verifiedAt: new Date() }, update: { passwordHash, ...(process.env.ADMIN_ROLE ? { role } : {}), suspended: false, verifiedAt: new Date(), verificationHash: null, verificationExpiresAt: null, verificationSentAt: null } });
   console.log("Account ready with requested role.");

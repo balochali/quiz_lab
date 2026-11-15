@@ -13,7 +13,7 @@ export default async function PlatformQuizzes({ searchParams }: { searchParams: 
     orderBy: { createdAt: "desc" }, skip: (page - 1) * 50, take: 51,
   });
   const params = new URLSearchParams({ q, lecturer });
-  return <><form className="row wrap">
+  return <><header className="admin-page-heading"><p className="eyebrow">Assessment library</p><h1>All quizzes</h1><p>Explore quizzes across all lecturers and subjects.</p></header><form className="row wrap">
     <label>Find quiz<input name="q" defaultValue={q} /></label><input type="hidden" name="lecturer" value={lecturer} /><button>Search</button>
     <Link href="/admin/platform/quizzes">All lecturers</Link>
   </form><section className="card scroll"><table>

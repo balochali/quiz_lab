@@ -19,6 +19,7 @@ if (publicUrl.protocol !== "https:") {
   process.exit(1);
 }
 const bootstrap = process.env.ADMIN_ROLE === "SUPER_ADMIN";
+if (process.env.ADMIN_RESET_PASSWORD === "1" && !bootstrap) throw new Error("Set ADMIN_ROLE=SUPER_ADMIN when using ADMIN_RESET_PASSWORD=1");
 if (bootstrap && (!process.env.ADMIN_EMAIL || !process.env.ADMIN_PASSWORD)) throw new Error("Set ADMIN_EMAIL and ADMIN_PASSWORD for super admin provisioning");
 for (const args of [
   ["scripts/prisma-setup.mjs", "generate"],

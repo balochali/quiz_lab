@@ -15,7 +15,7 @@ export default async function AllAttempts({ searchParams }: { searchParams: Prom
       status: true, submittedAt: true, gradingPending: true, quiz: { select: { admin: { select: { email: true } } } }, _count: { select: { violations: true } } },
     orderBy: { startedAt: "desc" }, skip: (page - 1) * 50, take: 51 });
   const params = new URLSearchParams({ student, quiz });
-  return <><section className="card scroll"><table>
+  return <><header className="admin-page-heading"><p className="eyebrow">Platform assessment records</p><h1>All attempts</h1><p>Review submissions and monitoring events across the platform.</p></header><section className="card scroll"><table>
     <thead><tr><th>Student</th><th>Roll number</th><th>Quiz / Lecturer</th><th>Marks</th><th>Status</th><th>Events</th></tr></thead>
     <tbody>{attempts.slice(0, 50).map(a => <tr key={a.id}><td><Link href={"/admin/platform/attempts/" + a.id}>{a.studentName}</Link></td><td>{a.rollNumber}</td>
       <td>{a.quizTitle}<br />{a.quiz.admin.email}</td><td>{a.gradingPending ? "Awaiting grading" : a.submittedAt ? a.obtainedMarks + " / " + a.totalMarks : "—"}</td>
