@@ -17,7 +17,7 @@ import { QuizSettings } from "./quiz-settings";
 const blank: QuizInput = {
   title: "", course: "", opensAt: null, expiresAt: null, semester: "", description: "", instructions: "", durationMinutes: 15, totalMarks: 10,
   randomQuestions: false, randomOptions: false, requireFullscreen: true, detectTabSwitch: true,
-  terminateOnTabSwitch: true, autoSubmit: true, multipleAttempts: false, showResults: true, questions: [],
+  terminateOnTabSwitch: true, autoSubmit: true, multipleAttempts: false, nextOnly: false, showResults: true, questions: [],
 };
 
 const steps = ["Quiz information", "Questions", "Settings", "Publish"];

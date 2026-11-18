@@ -5,6 +5,7 @@ import { settings, type QuizInput } from "@/lib/quiz-schema";
 
 type Setting = keyof typeof settings;
 const rules = [
+  { key: "nextOnly", Icon: ListChecks, tone: "violet", help: "Students advance with Next only. They cannot revisit or jump to other question tabs." },
   { key: "randomQuestions", Icon: Shuffle, tone: "violet", help: "Give students a different question order." },
   { key: "randomOptions", Icon: ListChecks, tone: "blue", help: "Reorder the answer options for multiple-choice questions." },
   { key: "requireFullscreen", Icon: Maximize, tone: "mint", help: "Ask students to enter fullscreen before starting." },

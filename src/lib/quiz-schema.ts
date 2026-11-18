@@ -8,6 +8,7 @@ export const settings = {
   terminateOnTabSwitch: "End attempt on tab switch",
   autoSubmit: "Automatically submit at expiry",
   multipleAttempts: "Allow repeat attempts",
+  nextOnly: "Next-only navigation",
 
 } as const;
 
@@ -28,6 +29,7 @@ export const quizSchema = z.object({
   terminateOnTabSwitch: z.boolean(),
   autoSubmit: z.boolean(),
   multipleAttempts: z.boolean(),
+  nextOnly: z.boolean().default(false),
   showResults: z.boolean(),
   opensAt: z.iso.datetime().nullable(),
   expiresAt: z.iso.datetime().nullable(),

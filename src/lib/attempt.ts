@@ -9,6 +9,7 @@ import { db } from "./db";
 
 const IN_PROGRESS = "IN_PROGRESS";
 const fullscreenDeadline = (order: string): number | null => JSON.parse(order).fullscreenDeadline ?? null;
+const navigationPosition = (order: string): number => { const value = JSON.parse(order).navigationPosition; return Number.isInteger(value) && value >= 0 ? value : 0; };
 const cookieName = (id: string) => "attempt_" + id;
 const studentSchema = z.object({
   name: z.string().trim().min(1).max(150),
@@ -115,7 +116,7 @@ export async function studentState(id: string) {
       where: { id, tokenHash: hash },
       include: {
         quiz: { select: {
-          requireFullscreen: true, detectTabSwitch: true, terminateOnTabSwitch: true, autoSubmit: true, showResults: true, resultsReleasedAt: true,
+          nextOnly: true, requireFullscreen: true, detectTabSwitch: true, terminateOnTabSwitch: true, autoSubmit: true, showResults: true, resultsReleasedAt: true,
           questions: { select: { id: true, text: true, marks: true, durationSeconds: true, type: true, options: { select: { id: true, text: true } } } },
         } },
         answers: { select: { questionId: true, optionId: true, textAnswer: true } },
@@ -131,12 +132,12 @@ export async function studentState(id: string) {
       const graded = await tx.quizAttempt.findUniqueOrThrow({ where: { id }, select: { obtainedMarks: true, gradingPending: true } });
       return { ...base, phase: "closed" as const, gradingPending: graded.gradingPending, result: !graded.gradingPending && (attempt.quiz.showResults || attempt.quiz.resultsReleasedAt) ? { score: graded.obtainedMarks, total: attempt.totalMarks } : null };
     }
-    const { questions, requireFullscreen, detectTabSwitch, terminateOnTabSwitch, autoSubmit } = attempt.quiz;
-    const policy = { requireFullscreen, detectTabSwitch, terminateOnTabSwitch, autoSubmit };
+    const { questions, nextOnly, requireFullscreen, detectTabSwitch, terminateOnTabSwitch, autoSubmit } = attempt.quiz;
+    const policy = { nextOnly, requireFullscreen, detectTabSwitch, terminateOnTabSwitch, autoSubmit };
     const { order, optionOrders } = JSON.parse(attempt.questionOrder) as { order: string[]; optionOrders: Record<string, string[]> };
     const byId = new Map(questions.map(q => [q.id, q]));
     return {
-      ...base, phase: "active" as const, fullscreenDeadline: grace, policy, answers: Object.fromEntries(attempt.answers.map(a => [a.questionId, a.optionId ?? a.textAnswer ?? ""])),
+      ...base, navigationPosition: attempt.quiz.nextOnly ? navigationPosition(attempt.questionOrder) : 0, phase: "active" as const, fullscreenDeadline: grace, policy, answers: Object.fromEntries(attempt.answers.map(a => [a.questionId, a.optionId ?? a.textAnswer ?? ""])),
       questions: order.map(id => {
         const q = byId.get(id)!;
         return { ...q, options: optionOrders[id].map(id => q.options.find(o => o.id === id)!) };
@@ -171,6 +172,17 @@ export async function applyEvent(id: string, event: z.infer<typeof eventSchema>)
     }
     if (a.endsAt <= now) return { status: await finish(tx, id, "EXPIRED", a.endsAt) };
     if (event.type === "QUESTION_OPEN" || event.type === "ANSWER") {
+      if (a.quiz.nextOnly) {
+        const order = JSON.parse(a.questionOrder);
+        const current = order.navigationPosition ?? 0;
+        const requested = order.order.indexOf(event.questionId);
+        if (requested < 0 || (requested !== current && !(event.type === "QUESTION_OPEN" && requested === current + 1))) return { error: "Next-only navigation is enabled. You cannot revisit or skip questions." };
+        if (event.type === "QUESTION_OPEN" && requested === current + 1) {
+          order.navigationPosition = requested;
+          await tx.quizAttempt.update({ where: { id }, data: { questionOrder: JSON.stringify(order) } });
+          a.questionOrder = JSON.stringify(order);
+        }
+      }
       const timingQuestion = await tx.question.findFirst({ where: { id: event.questionId, quizId: a.quizId }, select: { durationSeconds: true } });
       if (!timingQuestion) return { error: "Question not found." };
       if (timingQuestion.durationSeconds) {

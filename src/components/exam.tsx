@@ -18,7 +18,7 @@ type Event = "SUBMIT" | "TIME" | "BLUR" | "TAB_SWITCH" | "FULLSCREEN_EXIT" | "FU
 export function Exam({ quiz, initial }: { quiz?: JoinQuiz; initial?: Extract<State, { phase: "active" }> }) {
   const [attempt, setAttempt] = useState(initial);
   const [ready, setReady] = useState(false);
-  const [position, setPosition] = useState(0);
+  const [position, setPosition] = useState<number>(initial?.navigationPosition ?? 0);
   const [answers, setAnswers] = useState(initial?.answers ?? {});
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -26,6 +26,8 @@ export function Exam({ quiz, initial }: { quiz?: JoinQuiz; initial?: Extract<Sta
   const [stopped, setStopped] = useState<Event | null>(null);
   const [clock, setClock] = useState(Date.now);
   const [offset, setOffset] = useState(() => initial ? initial.serverNow - Date.now() : 0);
+  const [openRetry, setOpenRetry] = useState(0);
+  const [openedQuestion, setOpenedQuestion] = useState<string | null>(null);
   const [questionDeadlines, setQuestionDeadlines] = useState<Record<string, number>>({});
   const visibleQuestionId = attempt?.questions[position]?.id;
   useEffect(() => {
@@ -34,13 +36,14 @@ export function Exam({ quiz, initial }: { quiz?: JoinQuiz; initial?: Extract<Sta
     void fetch("/api/attempt/" + attempt.id, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "QUESTION_OPEN", questionId: visibleQuestionId }) }).then(async response => {
       if (!response.ok) throw new Error();
       const result = await response.json();
+      if (!cancelled) setOpenedQuestion(visibleQuestionId);
       if (!cancelled && result.deadline) {
         setQuestionDeadlines(previous => ({ ...previous, [visibleQuestionId]: result.deadline }));
         setOffset(result.serverNow - Date.now());
       }
     }).catch(() => { if (!cancelled) setError("Unable to start question timer. Check your connection and reopen the question."); });
     return () => { cancelled = true; };
-  }, [attempt, ready, visibleQuestionId]);
+  }, [attempt, ready, visibleQuestionId, openRetry]);
   useEffect(() => {
     if (!attempt || !ready || !visibleQuestionId || !questionDeadlines[visibleQuestionId] || clock + offset < questionDeadlines[visibleQuestionId]) return;
     const advance = window.setTimeout(() => setPosition(current => {
@@ -257,6 +260,7 @@ export function Exam({ quiz, initial }: { quiz?: JoinQuiz; initial?: Extract<Sta
         }
         window.history.replaceState(null, "", "/quiz/" + result.id);
         setAttempt(state);
+        setPosition(state.navigationPosition);
         setAnswers(state.answers ?? {});
         setOffset(state.serverNow - Date.now());
         setClock(Date.now());
@@ -314,7 +318,7 @@ export function Exam({ quiz, initial }: { quiz?: JoinQuiz; initial?: Extract<Sta
   const questions = attempt.questions ?? [];
   const question = questions[position];
   if (!question) return null;
-  const questionLocked = !!question.durationSeconds && (!questionDeadlines[question.id] || clock + offset >= questionDeadlines[question.id]);
+  const questionLocked = (attempt.policy.nextOnly && openedQuestion !== question.id) || (!!question.durationSeconds && (!questionDeadlines[question.id] || clock + offset >= questionDeadlines[question.id]));
   const completed = Object.values(answers).filter(value => !!value.trim()).length;
   const questionSeconds = question.durationSeconds && questionDeadlines[question.id] ? Math.max(0, Math.ceil((questionDeadlines[question.id] - clock - offset) / 1000)) : question.durationSeconds;
   return <main className="exam exam-colorful">
@@ -325,7 +329,8 @@ export function Exam({ quiz, initial }: { quiz?: JoinQuiz; initial?: Extract<Sta
     <p className="muted">{completed} of {questions.length} answered {busy && " · Saving…"}</p>
     <nav className="row wrap" aria-label="Questions">{questions.map((q, index) => <button key={q.id}
       className={index === position ? "primary" : answers[q.id] ? "selected" : ""}
-      aria-current={index === position ? "step" : undefined} onClick={() => setPosition(index)}>{index + 1}</button>)}</nav>
+      disabled={attempt.policy.nextOnly} aria-current={index === position ? "step" : undefined} onClick={() => setPosition(index)}>{index + 1}</button>)}</nav>
+    {attempt.policy.nextOnly && <p className="notice">Next-only navigation: use Next to advance. Previous questions cannot be reopened.</p>}
     <dialog ref={graceDialog} className="fullscreen-grace-modal" onCancel={event => event.preventDefault()} aria-labelledby="fullscreen-warning-title" aria-describedby="fullscreen-warning-description">
       <ShieldCheck size={36} /><h2 id="fullscreen-warning-title">Return to fullscreen</h2>
       <p id="fullscreen-warning-description">Your quiz will terminate unless you return within 5 seconds. Switching tabs now will terminate it immediately.</p>
@@ -351,10 +356,11 @@ export function Exam({ quiz, initial }: { quiz?: JoinQuiz; initial?: Extract<Sta
         {question.type === "THEORY" && <p className="notice">Your lecturer will grade this written answer after submission.</p>}
       </div>}
       {error && <p role="alert" className="error">{error}</p>}
+      {error && attempt.policy.nextOnly && openedQuestion !== question.id && <button onClick={() => setOpenRetry(value => value + 1)}>Retry opening question</button>}
       <div className="row between wrap">
         {position + 1 < questions.length
-          ? <button className="primary" disabled={busy} onClick={async () => { await flushText(); if (!failedAnswers.current.size) { setConfirmSubmit(false); setPosition(position + 1); } }}>Next <ArrowRight size={17} /></button>
-          : <button className="primary" disabled={busy} onClick={() => setConfirmSubmit(true)}>Submit quiz</button>}
+          ? <button className="primary" disabled={busy || (attempt.policy.nextOnly && openedQuestion !== question.id)} onClick={async () => { await flushText(); if (!failedAnswers.current.size) { setConfirmSubmit(false); setPosition(position + 1); } }}>Next <ArrowRight size={17} /></button>
+          : <button className="primary" disabled={busy || (attempt.policy.nextOnly && openedQuestion !== question.id)} onClick={() => setConfirmSubmit(true)}>Submit quiz</button>}
       </div>
       {confirmSubmit && position + 1 === questions.length && <div className="notice stack" role="group" aria-label="Confirm submission">
         <p>Submit your quiz? You cannot change answers afterward.</p>
