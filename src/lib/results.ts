@@ -16,7 +16,7 @@ export async function findResults(adminId: string, filters: { q?: string; quiz?:
   return db.quizAttempt.findMany({
     where, orderBy: { startedAt: "desc" },
     select: {
-      id: true, quizTitle: true, studentName: true, rollNumber: true, semester: true,
+      id: true, quizId: true, quizTitle: true, studentName: true, rollNumber: true, semester: true,
       obtainedMarks: true, totalMarks: true, gradingPending: true, status: true, submittedAt: true,
       _count: { select: { violations: true } },
     },
