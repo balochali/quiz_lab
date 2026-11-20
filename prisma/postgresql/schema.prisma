@@ -126,6 +126,7 @@ model StudentAnswer {
  @@unique([attemptId, questionId])
 }
 model Violation {
+ details String?
  id String @id @default(cuid())
  attemptId String
  attempt QuizAttempt @relation(fields: [attemptId], references: [id])

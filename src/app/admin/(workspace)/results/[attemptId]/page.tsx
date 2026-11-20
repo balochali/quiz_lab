@@ -1,6 +1,8 @@
+import { MonitoringTimeline } from "@/components/monitoring-timeline";
+import { formatKarachiDateTime } from "@/lib/monitoring";
 import { CodeContent } from "@/components/code-content";
 import Link from "next/link";
-import { CheckCircle2, XCircle, Clock, MinusCircle, ShieldCheck } from "lucide-react";
+import { CheckCircle2, XCircle, Clock, MinusCircle } from "lucide-react";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { settleExpired } from "@/lib/attempt";
@@ -34,8 +36,8 @@ export default async function Detail({ params, searchParams }: {
     <header className="result-detail-header"><Link href="/admin/results">← All results</Link><p className="eyebrow">Student assessment review</p><h1>{attempt.studentName}</h1><div className="result-identity"><span>{attempt.rollNumber}</span><span>Semester: {attempt.semester}</span><span>{attempt.quizTitle}</span></div></header>
     {typeof grading === "string" && <p className="notice" role="status">{grading.slice(0, 300)}</p>}
     <section className="card stack result-attempt-summary"><span className="eyebrow">Attempt overview</span><h2>{statusLabel(attempt.status)}</h2>
-      <p>Started {attempt.startedAt.toISOString()}</p>
-      {attempt.submittedAt && <><p>Submitted {attempt.submittedAt.toISOString()}</p>
+      <p>Started {formatKarachiDateTime(attempt.startedAt)}</p>
+      {attempt.submittedAt && <><p>Submitted {formatKarachiDateTime(attempt.submittedAt)}</p>
         <strong>{attempt.gradingPending ? "Awaiting written-answer grading" : attempt.obtainedMarks + " / " + attempt.totalMarks + " marks"}</strong></>}
     </section>
     <section className="card stack result-answer-section"><div><p className="eyebrow">Question by question</p><h2>Answer review</h2><p className="muted">Green: correct · Red: incorrect · Amber: partial marks or awaiting grading · Gray: unanswered</p></div><AnswerTabs states={answerStates}>{attempt.quiz.questions.map((question, index) => {
@@ -60,10 +62,6 @@ export default async function Detail({ params, searchParams }: {
         </form>}
       </article>;
     })}</AnswerTabs></section>
-    <section className="card stack result-monitoring"><h2><ShieldCheck size={23} /> Monitoring events ({attempt.violations.length})</h2>
-      {attempt.violations.length ? <ul>{attempt.violations.map(event => <li key={event.id}>
-        {event.type === "BLUR" ? "Window lost focus (informational)" : event.type === "TAB_SWITCH" ? "Tab became hidden" : "Exited fullscreen"} · {event.createdAt.toISOString()}
-      </li>)}</ul> : <p>No monitoring events recorded.</p>}
-    </section>
+    <MonitoringTimeline events={attempt.violations} />
   </>;
 }

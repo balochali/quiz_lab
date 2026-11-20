@@ -19,7 +19,7 @@ const studentSchema = z.object({
 export const eventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("QUESTION_OPEN"), questionId: z.string() }),
   z.object({ type: z.literal("ANSWER"), questionId: z.string(), optionId: z.string().optional(), textAnswer: z.string().max(12000).optional() }),
-  z.object({ type: z.enum(["SUBMIT", "TIME", "BLUR", "TAB_SWITCH", "FULLSCREEN_EXIT", "FULLSCREEN_RESTORED"]) }),
+  z.object({ type: z.enum(["SUBMIT", "TIME", "BLUR", "TAB_SWITCH", "FULLSCREEN_EXIT", "FULLSCREEN_RESTORED", "FOCUS", "VISIBLE"]), context: z.object({ questionId: z.string().max(100).optional(), visibility: z.enum(["visible", "hidden"]), hasFocus: z.boolean(), fullscreen: z.boolean() }).optional() }),
 ]);
 
 function shuffled(ids: string[], enabled: boolean) {
@@ -155,10 +155,14 @@ export async function applyEvent(id: string, event: z.infer<typeof eventSchema>)
     if (!a) return null;
     if (a.status !== IN_PROGRESS) return { status: a.status };
     const now = new Date();
+    const context = "context" in event ? event.context : undefined;
+    const position = context?.questionId ? (JSON.parse(a.questionOrder).order as string[]).indexOf(context.questionId) : -1;
+    const details = context ? JSON.stringify({ version: 1, visibility: context.visibility, hasFocus: context.hasFocus, fullscreen: context.fullscreen, ...(position >= 0 ? { questionNumber: position + 1 } : {}) }) : null;
     const grace = fullscreenDeadline(a.questionOrder);
     if (grace && grace <= now.getTime()) return { status: await finish(tx, id, "FULLSCREEN_EXIT", new Date(grace)) };
     if (event.type === "FULLSCREEN_RESTORED") {
       const order = JSON.parse(a.questionOrder);
+      if (grace) await tx.violation.create({ data: { attemptId: id, type: "FULLSCREEN_RESTORED", createdAt: now, details } });
       delete order.fullscreenDeadline;
       await tx.quizAttempt.update({ where: { id }, data: { questionOrder: JSON.stringify(order) } });
       return { status: IN_PROGRESS };
@@ -167,10 +171,14 @@ export async function applyEvent(id: string, event: z.infer<typeof eventSchema>)
       const order = JSON.parse(a.questionOrder);
       order.fullscreenDeadline ??= now.getTime() + 5000;
       await tx.quizAttempt.update({ where: { id }, data: { questionOrder: JSON.stringify(order) } });
-      if (!grace) await tx.violation.create({ data: { attemptId: id, type: "FULLSCREEN_EXIT", createdAt: now } });
+      if (!grace) await tx.violation.create({ data: { attemptId: id, type: "FULLSCREEN_EXIT", createdAt: now, details } });
       return { status: IN_PROGRESS, fullscreenDeadline: order.fullscreenDeadline };
     }
     if (a.endsAt <= now) return { status: await finish(tx, id, "EXPIRED", a.endsAt) };
+    if (event.type === "FOCUS" || event.type === "VISIBLE") {
+      await tx.violation.create({ data: { attemptId: id, type: event.type, createdAt: now, details } });
+      return { status: IN_PROGRESS };
+    }
     if (event.type === "QUESTION_OPEN" || event.type === "ANSWER") {
       if (a.quiz.nextOnly) {
         const order = JSON.parse(a.questionOrder);
@@ -226,7 +234,7 @@ export async function applyEvent(id: string, event: z.infer<typeof eventSchema>)
       return { status: await finish(tx, id, "SUBMITTED", now) };
     } else if (event.type === "BLUR" || (event.type === "TAB_SWITCH" && (a.quiz.detectTabSwitch || !!grace)) ||
       (event.type === "FULLSCREEN_EXIT" && a.quiz.requireFullscreen)) {
-      await tx.violation.create({ data: { attemptId: id, type: event.type, createdAt: now } });
+      await tx.violation.create({ data: { attemptId: id, type: event.type, createdAt: now, details } });
       if (event.type === "FULLSCREEN_EXIT" || (event.type === "TAB_SWITCH" && (a.quiz.terminateOnTabSwitch || !!grace))) {
         return { status: await finish(tx, id, event.type, now) };
       }

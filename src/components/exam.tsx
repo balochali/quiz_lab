@@ -13,7 +13,8 @@ type JoinQuiz = {
   code: string; title: string; course: string; durationMinutes: number; instructions: string; description: string;
   requireFullscreen: boolean; detectTabSwitch: boolean; terminateOnTabSwitch: boolean; _count: { questions: number };
 };
-type Event = "SUBMIT" | "TIME" | "BLUR" | "TAB_SWITCH" | "FULLSCREEN_EXIT" | "FULLSCREEN_RESTORED";
+type Event = "SUBMIT" | "TIME" | "BLUR" | "TAB_SWITCH" | "FULLSCREEN_EXIT" | "FULLSCREEN_RESTORED" | "FOCUS" | "VISIBLE";
+type Observation = { questionId?: string; visibility: DocumentVisibilityState; hasFocus: boolean; fullscreen: boolean };
 
 export function Exam({ quiz, initial }: { quiz?: JoinQuiz; initial?: Extract<State, { phase: "active" }> }) {
   const [attempt, setAttempt] = useState(initial);
@@ -27,9 +28,14 @@ export function Exam({ quiz, initial }: { quiz?: JoinQuiz; initial?: Extract<Sta
   const [clock, setClock] = useState(Date.now);
   const [offset, setOffset] = useState(() => initial ? initial.serverNow - Date.now() : 0);
   const [openRetry, setOpenRetry] = useState(0);
+  const questionRef = useRef<string | undefined>(undefined);
+  const focusLostRef = useRef(false);
+  const pageHiddenRef = useRef(false);
+  const monitoringQueue = useRef<Promise<void>>(Promise.resolve());
   const [openedQuestion, setOpenedQuestion] = useState<string | null>(null);
   const [questionDeadlines, setQuestionDeadlines] = useState<Record<string, number>>({});
   const visibleQuestionId = attempt?.questions[position]?.id;
+  useEffect(() => { questionRef.current = visibleQuestionId; }, [visibleQuestionId]);
   useEffect(() => {
     if (!attempt || !ready || !visibleQuestionId) return;
     let cancelled = false;
@@ -119,7 +125,8 @@ export function Exam({ quiz, initial }: { quiz?: JoinQuiz; initial?: Extract<Sta
   }, [flushText]);
   const remaining = attempt ? Math.max(0, Math.ceil((attempt.endsAt - clock - offset) / 1000)) : 0;
 
-  const send = useCallback(async (type: Event, terminal = false) => {
+  const send = useCallback(async (type: Event, terminal = false, observed?: Observation) => {
+    const context = observed ?? { questionId: questionRef.current, visibility: document.visibilityState, hasFocus: document.hasFocus(), fullscreen: !!document.fullscreenElement };
     if (!attempt || (ending.current && !terminal) || (terminal && requestInFlight.current)) return;
     if (terminal) {
       ending.current = true;
@@ -134,7 +141,7 @@ export function Exam({ quiz, initial }: { quiz?: JoinQuiz; initial?: Extract<Sta
         if (type === "SUBMIT" && failedAnswers.current.size) throw new Error("Pending answer was not saved");
       } else if (terminal) void flushText();
       const response = await fetch("/api/attempt/" + attempt.id, {
-        method: "POST", body: JSON.stringify({ type }), headers: { "Content-Type": "application/json" },
+        method: "POST", body: JSON.stringify({ type, context }), headers: { "Content-Type": "application/json" },
         keepalive: true,
       });
       const result = await response.json();
@@ -163,37 +170,49 @@ export function Exam({ quiz, initial }: { quiz?: JoinQuiz; initial?: Extract<Sta
   useEffect(() => {
     if (!attempt?.policy || !ready) return;
     const policy = attempt.policy;
+    function report(type: Event) {
+      const context: Observation = { questionId: questionRef.current, visibility: document.visibilityState, hasFocus: document.hasFocus(), fullscreen: !!document.fullscreenElement };
+      monitoringQueue.current = monitoringQueue.current.then(() => send(type, false, context));
+    }
     function visibility() {
+      if (!document.hidden) { if (pageHiddenRef.current) { pageHiddenRef.current = false; report("VISIBLE"); } return; }
       if (!document.hidden || (!policy.detectTabSwitch && !graceRef.current)) return;
+      if (pageHiddenRef.current) return;
+      pageHiddenRef.current = true;
       if (policy.terminateOnTabSwitch || graceRef.current) {
+        const context: Observation = { questionId: questionRef.current, visibility: document.visibilityState, hasFocus: document.hasFocus(), fullscreen: !!document.fullscreenElement };
         ending.current = true; setStopped("TAB_SWITCH");
-        void fullscreenRequest.current.then(() => send("TAB_SWITCH", true));
+        void fullscreenRequest.current.then(() => send("TAB_SWITCH", true, context));
       }
-      else void send("TAB_SWITCH");
+      else report("TAB_SWITCH");
     }
     function fullscreen() {
       if (!policy.requireFullscreen || ending.current) return;
+      const context: Observation = { questionId: questionRef.current, visibility: document.visibilityState, hasFocus: document.hasFocus(), fullscreen: !!document.fullscreenElement };
       if (!document.fullscreenElement && !graceRef.current) {
         const deadline = Date.now() + offset + 5000;
         graceRef.current = deadline;
         setFullscreenGrace(deadline);
-        fullscreenRequest.current = fullscreenRequest.current.then(() => send("FULLSCREEN_EXIT"));
+        fullscreenRequest.current = fullscreenRequest.current.then(() => send("FULLSCREEN_EXIT", false, context));
       } else if (document.fullscreenElement && graceRef.current) {
         graceRef.current = null;
         setFullscreenGrace(null);
-        fullscreenRequest.current = fullscreenRequest.current.then(() => send("FULLSCREEN_RESTORED"));
+        fullscreenRequest.current = fullscreenRequest.current.then(() => send("FULLSCREEN_RESTORED", false, context));
       }
     }
-    function blur() { void send("BLUR"); }
+    function blur() { focusLostRef.current = true; report("BLUR"); }
+    function focus() { if (focusLostRef.current) { focusLostRef.current = false; report("FOCUS"); } }
     document.addEventListener("visibilitychange", visibility);
     document.addEventListener("fullscreenchange", fullscreen);
     window.addEventListener("blur", blur);
+    window.addEventListener("focus", focus);
     visibility();
     fullscreen();
     return () => {
       document.removeEventListener("visibilitychange", visibility);
       document.removeEventListener("fullscreenchange", fullscreen);
       window.removeEventListener("blur", blur);
+      window.removeEventListener("focus", focus);
     };
   }, [attempt, ready, send, offset]);
 
