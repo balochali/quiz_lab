@@ -1,3 +1,4 @@
+import { finalMarks } from "@/lib/score-adjustments";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { closeQuizLink, releaseResults } from "@/app/admin/actions";
@@ -20,8 +21,9 @@ export default async function Leaderboard({ params }: { params: Promise<{ id: st
   const attempts = await db.quizAttempt.findMany({
     where: { quizId: id, quiz: { adminId }, submittedAt: { not: null }, gradingPending: false },
     orderBy: [{ obtainedMarks: "desc" }, { submittedAt: "asc" }, { id: "asc" }],
-    select: { id: true, studentName: true, rollNumber: true, obtainedMarks: true, totalMarks: true, status: true },
+    select: { id: true, studentName: true, rollNumber: true, obtainedMarks: true, adjustedMarks: true, submittedAt: true, totalMarks: true, status: true },
   });
+  attempts.sort((a, b) => finalMarks(b) - finalMarks(a) || (a.submittedAt?.getTime() ?? 0) - (b.submittedAt?.getTime() ?? 0) || a.id.localeCompare(b.id));
   const seenRollNumbers = new Set<string>();
   const bestAttempts = attempts.filter(attempt => {
     if (seenRollNumbers.has(attempt.rollNumber)) return false;
@@ -31,7 +33,7 @@ export default async function Leaderboard({ params }: { params: Promise<{ id: st
   let rank = 0;
   const ranked: (typeof bestAttempts[number] & { rank: number })[] = [];
   for (const [index, attempt] of bestAttempts.entries()) {
-    if (attempt.obtainedMarks !== bestAttempts[index - 1]?.obtainedMarks) rank = index + 1;
+    if (!bestAttempts[index - 1] || finalMarks(attempt) !== finalMarks(bestAttempts[index - 1])) rank = index + 1;
     ranked.push({ ...attempt, rank });
   }
   return <>
@@ -61,7 +63,7 @@ export default async function Leaderboard({ params }: { params: Promise<{ id: st
         <thead><tr><th>Rank</th><th>Student</th><th>Roll number</th><th>Score</th><th>Status</th></tr></thead>
         <tbody>{ranked.map(attempt => <tr key={attempt.id}><td>{attempt.rank}</td>
             <td><Link href={"/admin/results/" + attempt.id}>{attempt.studentName}</Link></td>
-            <td>{attempt.rollNumber}</td><td>{attempt.obtainedMarks} / {attempt.totalMarks}</td><td>{statusLabel(attempt.status)}</td>
+            <td>{attempt.rollNumber}</td><td>{finalMarks(attempt)} / {attempt.totalMarks}</td><td>{statusLabel(attempt.status)}</td>
           </tr>)}</tbody>
       </table> : <p>No finalized attempts yet.</p>}
     </section>

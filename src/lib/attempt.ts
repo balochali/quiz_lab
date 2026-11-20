@@ -3,6 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { cookies } from "next/headers";
 import { z } from "zod";
 import { cookieOptions, hashToken } from "./auth";
+import { finalMarks } from "./score-adjustments";
 import { gradeAttempt } from "./grading";
 import { quizLinkClosed } from "./quiz-schedule";
 import { db } from "./db";
@@ -129,8 +130,8 @@ export async function studentState(id: string) {
       ? await finish(tx, id, "EXPIRED", attempt.endsAt) : attempt.status;
     const base = { id, title: attempt.quizTitle, status, endsAt: attempt.endsAt.getTime(), serverNow: Date.now() };
     if (status !== IN_PROGRESS) {
-      const graded = await tx.quizAttempt.findUniqueOrThrow({ where: { id }, select: { obtainedMarks: true, gradingPending: true } });
-      return { ...base, phase: "closed" as const, gradingPending: graded.gradingPending, result: !graded.gradingPending && (attempt.quiz.showResults || attempt.quiz.resultsReleasedAt) ? { score: graded.obtainedMarks, total: attempt.totalMarks } : null };
+      const graded = await tx.quizAttempt.findUniqueOrThrow({ where: { id }, select: { obtainedMarks: true, adjustedMarks: true, totalMarks: true, gradingPending: true } });
+      return { ...base, phase: "closed" as const, gradingPending: graded.gradingPending, result: !graded.gradingPending && (attempt.quiz.showResults || attempt.quiz.resultsReleasedAt) ? { score: finalMarks(graded), total: graded.totalMarks } : null };
     }
     const { questions, nextOnly, requireFullscreen, detectTabSwitch, terminateOnTabSwitch, autoSubmit } = attempt.quiz;
     const policy = { nextOnly, requireFullscreen, detectTabSwitch, terminateOnTabSwitch, autoSubmit };

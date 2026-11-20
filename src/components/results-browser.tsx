@@ -3,18 +3,20 @@
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, BookOpen, Download, Users, Trophy, Clock, RefreshCw } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookOpen, Download, Users, Trophy, Clock, RefreshCw, Search, PencilLine } from "lucide-react";
 import { subjectStyle } from "@/lib/subject-style";
+import { finalMarks, matchesStudent } from "@/lib/score-adjustments";
+import { AdjustMarksDialog } from "./adjust-marks-dialog";
 import { statusLabel } from "@/lib/quiz-schema";
 
-export type ResultRow = { id: string; quizId: string; studentName: string; rollNumber: string; semester: string; obtainedMarks: number; totalMarks: number; gradingPending: boolean; status: string; submittedAt: string | null; _count: { violations: number } };
+export type ResultRow = { id: string; quizId: string; studentName: string; rollNumber: string; semester: string; obtainedMarks: number; adjustedMarks: number | null; markAdjustments: string; totalMarks: number; gradingPending: boolean; status: string; submittedAt: string | null; _count: { violations: number } };
 type Quiz = { id: string; title: string; course: string };
 function summary(rows: ResultRow[]) {
   const graded = rows.filter(row => row.submittedAt && !row.gradingPending);
-  return { count: rows.length, graded: graded.length, pending: rows.filter(row => row.gradingPending).length, average: graded.length ? Math.round(graded.reduce((sum, row) => sum + (row.totalMarks > 0 ? row.obtainedMarks * 100 / row.totalMarks : 0), 0) / graded.length) : null };
+  return { count: rows.length, graded: graded.length, pending: rows.filter(row => row.gradingPending).length, average: graded.length ? Math.round(graded.reduce((sum, row) => sum + (row.totalMarks > 0 ? finalMarks(row) * 100 / row.totalMarks : 0), 0) / graded.length) : null };
 }
 
-export function ResultsBrowser({ quizzes, results, subjects, initialQuiz = "", canExport }: { quizzes: Quiz[]; results: ResultRow[]; subjects: string[]; initialQuiz?: string; canExport: boolean }) {
+export function ResultsBrowser({ quizzes, results, subjects, initialQuiz = "", canExport, canAdjust }: { quizzes: Quiz[]; results: ResultRow[]; subjects: string[]; initialQuiz?: string; canExport: boolean; canAdjust: boolean }) {
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
   const [subject, setSubject] = useState<string | null>(null);
@@ -22,6 +24,9 @@ export function ResultsBrowser({ quizzes, results, subjects, initialQuiz = "", c
   const [page, setPage] = useState(1);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState("");
+  const [search, setSearch] = useState("");
+  const [adjusting, setAdjusting] = useState<ResultRow | null>(null);
+  const [savedMessage, setSavedMessage] = useState("");
   const heading = useRef<HTMLHeadingElement>(null);
   const groups = useMemo(() => {
     const map = new Map<string, ResultRow[]>();
@@ -31,8 +36,11 @@ export function ResultsBrowser({ quizzes, results, subjects, initialQuiz = "", c
   const visible = quizzes.filter(quiz => subject === null || quiz.course === subject);
   const quiz = quizzes.find(item => item.id === selected);
   const rows = quiz ? groups.get(quiz.id) ?? [] : visible.flatMap(item => groups.get(item.id) ?? []);
+  const filteredRows = rows.filter(row => matchesStudent(row, search));
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / 25));
+  const currentPage = Math.min(page, totalPages);
   const stats = summary(rows);
-  function choose(id: string) { setSelected(id); setPage(1); setExportError(""); requestAnimationFrame(() => heading.current?.focus()); }
+  function choose(id: string) { setSelected(id); setPage(1); setSearch(""); setSavedMessage(""); setExportError(""); requestAnimationFrame(() => heading.current?.focus()); }
   async function exportExcel() {
     if (!quiz) return;
     setExporting(true); setExportError("");
@@ -46,6 +54,7 @@ export function ResultsBrowser({ quizzes, results, subjects, initialQuiz = "", c
     finally { setExporting(false); }
   }
   return <div className="results-browser">
+    {adjusting && <AdjustMarksDialog row={adjusting} onClose={() => setAdjusting(null)} onSaved={() => { setAdjusting(null); setSavedMessage("Updated marks saved."); startRefresh(() => router.refresh()); }} />}
     <header className="row between wrap"><div><p className="eyebrow">Assessment records</p><h1>Results</h1><p className="muted">Choose a subject, explore a quiz, and review your students’ progress.</p></div><button type="button" disabled={refreshing} onClick={() => startRefresh(() => router.refresh())}><RefreshCw size={16} />{refreshing ? "Updating…" : "Refresh results"}</button></header>
     <div className="results-subject-tabs" role="group" aria-label="Results by subject">
       {[null, ...subjects].map(name => <button type="button" key={name ?? "all"} aria-pressed={subject === name} onClick={() => { setSubject(name); choose(""); }}><BookOpen size={16} />{name ?? "All subjects"}<span>{quizzes.filter(item => name === null || item.course === name).length}</span></button>)}
@@ -55,9 +64,11 @@ export function ResultsBrowser({ quizzes, results, subjects, initialQuiz = "", c
       <button type="button" onClick={() => choose("")}><ArrowLeft size={16} /> Back to quizzes</button>
       <section className="card results-quiz-detail"><div className="row between wrap"><div><p className="eyebrow">{quiz.course}</p><h2 ref={heading} tabIndex={-1}>{quiz.title}</h2><p className="muted">{rows.length} student attempts</p></div>{canExport ? <button className="primary" type="button" disabled={exporting} onClick={() => void exportExcel()}><Download size={17} />{exporting ? "Preparing Excel…" : "Export to Excel"}</button> : <span className="badge">Export disabled by administrator</span>}</div>
         {exportError && <p className="error" role="alert">{exportError}</p>}
-        {!rows.length ? <div className="empty"><Users size={30} /><h3>No attempts yet</h3><p>Student results will appear here after they begin this quiz.</p></div> : <>
-          <div className="scroll"><table><thead><tr>{["Student", "Roll number", "Semester", "Marks", "Score", "Status", "Events", "Submitted (PKT)"].map(label => <th key={label}>{label}</th>)}</tr></thead><tbody>{rows.slice((page - 1) * 25, page * 25).map(row => <tr key={row.id}><td><Link href={"/admin/results/" + row.id}>{row.studentName}</Link></td><td>{row.rollNumber}</td><td>{row.semester}</td><td>{row.gradingPending ? "Awaiting grading" : row.submittedAt ? `${row.obtainedMarks} / ${row.totalMarks}` : "—"}</td><td><span className={"result-score " + (row.gradingPending || !row.submittedAt ? "result-score-pending" : row.obtainedMarks / row.totalMarks >= .5 ? "result-score-high" : "result-score-low")}>{row.submittedAt && !row.gradingPending && row.totalMarks > 0 ? Math.round(row.obtainedMarks * 100 / row.totalMarks) + "%" : "—"}</span></td><td><span className="badge">{row.gradingPending ? "Awaiting grading" : statusLabel(row.status)}</span></td><td>{row._count.violations}</td><td>{row.submittedAt ? new Date(row.submittedAt).toLocaleString("en-GB", { timeZone: "Asia/Karachi", dateStyle: "medium", timeStyle: "short" }) : "—"}</td></tr>)}</tbody></table></div>
-          <div className="row between wrap results-pagination"><button type="button" disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</button><span>Page {page} of {Math.ceil(rows.length / 25)}</span><button type="button" disabled={page * 25 >= rows.length} onClick={() => setPage(page + 1)}>Next</button></div>
+        <div className="results-student-search"><label><span className="row"><Search size={17} /> Find a student</span><input type="search" value={search} onChange={event => { setSearch(event.target.value); setPage(1); }} placeholder="Search name or roll number — any letter case" /></label><small>{filteredRows.length} matching of {rows.length} attempts. Excel exports all attempts for this quiz.</small></div>
+        {savedMessage && <p className="notice" role="status">{savedMessage}</p>}
+        {!rows.length ? <div className="empty"><Users size={30} /><h3>No attempts yet</h3><p>Student results will appear here after they begin this quiz.</p></div> : !filteredRows.length ? <div className="empty"><h3>No matching students</h3><p>Try another name or roll number.</p></div> : <>
+          <div className="scroll"><table><thead><tr>{["Student", "Roll number", "Semester", "Original marks", "Updated marks", "Score", "Status", "Events", "Submitted (PKT)"].map(label => <th key={label}>{label}</th>)}</tr></thead><tbody>{filteredRows.slice((currentPage - 1) * 25, currentPage * 25).map(row => <tr key={row.id}><td><Link href={"/admin/results/" + row.id}>{row.studentName}</Link></td><td>{row.rollNumber}</td><td>{row.semester}</td><td>{row.gradingPending ? "Awaiting grading" : row.submittedAt ? `${row.obtainedMarks} / ${row.totalMarks}` : "—"}</td><td><div className="updated-marks-cell"><strong>{row.submittedAt && !row.gradingPending ? `${finalMarks(row)} / ${row.totalMarks}` : "—"}</strong>{row.adjustedMarks !== null && <small>Adjusted by lecturer</small>}{canAdjust && row.submittedAt && !row.gradingPending && <button type="button" disabled={refreshing} onClick={() => setAdjusting(row)} aria-label={"Adjust marks for " + row.studentName}><PencilLine size={13} /> Adjust</button>}</div></td><td><span className={"result-score " + (row.gradingPending || !row.submittedAt ? "result-score-pending" : finalMarks(row) / row.totalMarks >= .5 ? "result-score-high" : "result-score-low")}>{row.submittedAt && !row.gradingPending && row.totalMarks > 0 ? Math.round(finalMarks(row) * 100 / row.totalMarks) + "%" : "—"}</span></td><td><span className="badge">{row.gradingPending ? "Awaiting grading" : statusLabel(row.status)}</span></td><td>{row._count.violations}</td><td>{row.submittedAt ? new Date(row.submittedAt).toLocaleString("en-GB", { timeZone: "Asia/Karachi", dateStyle: "medium", timeStyle: "short" }) : "—"}</td></tr>)}</tbody></table></div>
+          <div className="row between wrap results-pagination"><button type="button" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>Previous</button><span>Page {currentPage} of {totalPages}</span><button type="button" disabled={currentPage >= totalPages} onClick={() => setPage(currentPage + 1)}>Next</button></div>
         </>}
       </section>
     </> : <><h2 ref={heading} tabIndex={-1}>{subject ?? "All quizzes"}</h2><div className="results-quiz-grid">{visible.map(item => {

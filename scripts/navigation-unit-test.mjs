@@ -12,7 +12,8 @@ try {
  const tx={quizAttempt:{updateMany:async()=>({count:1}),findUnique:async()=>structuredClone(state.attempt),update:async({data})=>Object.assign(state.attempt,data)},question:{findFirst:async({where})=>state.questions.find(q=>q.id===where.id)||null},option:{findFirst:async()=>({id:'option'})},studentAnswer:{upsert:async({create})=>{state.saved.push(create)},deleteMany:async()=>({count:0})}};
  export const db={$transaction:async cb=>cb(tx)};`;
  writeFileSync(join(directory,'mocks.mjs'),mocks);
- const source=readFileSync('src/lib/attempt.ts','utf8').replaceAll('"next/headers"','"./mocks.mjs"').replaceAll('"./auth"','"./mocks.mjs"').replaceAll('"./db"','"./mocks.mjs"').replaceAll('"./grading"','"./mocks.mjs"').replaceAll('"./quiz-schedule"','"./mocks.mjs"');
+ writeFileSync(join(directory,'score-adjustments.mjs'),ts.transpileModule(readFileSync('src/lib/score-adjustments.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText);
+ const source=readFileSync('src/lib/attempt.ts','utf8').replaceAll('"next/headers"','"./mocks.mjs"').replaceAll('"./auth"','"./mocks.mjs"').replaceAll('"./db"','"./mocks.mjs"').replaceAll('"./grading"','"./mocks.mjs"').replaceAll('"./quiz-schedule"','"./mocks.mjs"').replaceAll('"./score-adjustments"','"./score-adjustments.mjs"');
  writeFileSync(join(directory,'attempt.mjs'),ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText);
  const {applyEvent}=await import(pathToFileURL(join(directory,'attempt.mjs')));
  const {state}=await import(pathToFileURL(join(directory,'mocks.mjs')));

@@ -92,6 +92,8 @@ model Student {
  attempts QuizAttempt[]
 }
 model QuizAttempt {
+ adjustedMarks Int?
+ markAdjustments String @default("[]")
  id String @id @default(cuid())
  quizId String
  quiz Quiz @relation(fields: [quizId], references: [id])

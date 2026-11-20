@@ -1,3 +1,4 @@
+import { adjustmentHistory, finalMarks } from "@/lib/score-adjustments";
 import { MonitoringTimeline } from "@/components/monitoring-timeline";
 import { formatKarachiDateTime } from "@/lib/monitoring";
 import { CodeContent } from "@/components/code-content";
@@ -38,7 +39,9 @@ export default async function Detail({ params, searchParams }: {
     <section className="card stack result-attempt-summary"><span className="eyebrow">Attempt overview</span><h2>{statusLabel(attempt.status)}</h2>
       <p>Started {formatKarachiDateTime(attempt.startedAt)}</p>
       {attempt.submittedAt && <><p>Submitted {formatKarachiDateTime(attempt.submittedAt)}</p>
-        <strong>{attempt.gradingPending ? "Awaiting written-answer grading" : attempt.obtainedMarks + " / " + attempt.totalMarks + " marks"}</strong></>}
+        <strong>{attempt.gradingPending ? "Awaiting written-answer grading" : finalMarks(attempt) + " / " + attempt.totalMarks + " marks"}</strong></>}
+      {attempt.adjustedMarks !== null && <p className="notice">Original marks: {attempt.obtainedMarks} / {attempt.totalMarks}. Lecturer-updated final: {finalMarks(attempt)} / {attempt.totalMarks}.</p>}
+      {adjustmentHistory(attempt.markAdjustments).length > 0 && <details className="adjustment-history"><summary>Lecturer adjustment history</summary>{[...adjustmentHistory(attempt.markAdjustments)].reverse().map((entry, index) => <article key={index}><strong>{entry.from ?? "Original"} → {entry.to ?? "Original"}</strong><p>{entry.reason}</p><small>{entry.actorEmail} · {formatKarachiDateTime(entry.at)}</small></article>)}</details>}
     </section>
     <section className="card stack result-answer-section"><div><p className="eyebrow">Question by question</p><h2>Answer review</h2><p className="muted">Green: correct · Red: incorrect · Amber: partial marks or awaiting grading · Gray: unanswered</p></div><AnswerTabs states={answerStates}>{attempt.quiz.questions.map((question, index) => {
       const answer = answers.get(question.id);

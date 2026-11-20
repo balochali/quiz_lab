@@ -1,3 +1,4 @@
+import { finalMarks } from "@/lib/score-adjustments";
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireSuperAdmin } from "@/lib/auth";
@@ -11,14 +12,14 @@ export default async function AllAttempts({ searchParams }: { searchParams: Prom
   const page = Math.max(1, Math.min(100000, Number(query.page) || 1));
   await settleExpired();
   const attempts = await db.quizAttempt.findMany({ where: { ...(student ? { studentId: student } : {}), ...(quiz ? { quizId: quiz } : {}) },
-    select: { id: true, studentName: true, rollNumber: true, quizTitle: true, obtainedMarks: true, totalMarks: true,
+    select: { id: true, studentName: true, rollNumber: true, quizTitle: true, obtainedMarks: true, adjustedMarks: true, totalMarks: true,
       status: true, submittedAt: true, gradingPending: true, quiz: { select: { admin: { select: { email: true } } } }, _count: { select: { violations: true } } },
     orderBy: { startedAt: "desc" }, skip: (page - 1) * 50, take: 51 });
   const params = new URLSearchParams({ student, quiz });
   return <><header className="admin-page-heading"><p className="eyebrow">Platform assessment records</p><h1>All attempts</h1><p>Review submissions and monitoring events across the platform.</p></header><section className="card scroll"><table>
     <thead><tr><th>Student</th><th>Roll number</th><th>Quiz / Lecturer</th><th>Marks</th><th>Status</th><th>Events</th></tr></thead>
     <tbody>{attempts.slice(0, 50).map(a => <tr key={a.id}><td><Link href={"/admin/platform/attempts/" + a.id}>{a.studentName}</Link></td><td>{a.rollNumber}</td>
-      <td>{a.quizTitle}<br />{a.quiz.admin.email}</td><td>{a.gradingPending ? "Awaiting grading" : a.submittedAt ? a.obtainedMarks + " / " + a.totalMarks : "—"}</td>
+      <td>{a.quizTitle}<br />{a.quiz.admin.email}</td><td>{a.gradingPending ? "Awaiting grading" : a.submittedAt ? finalMarks(a) + " / " + a.totalMarks : "—"}</td>
       <td>{statusLabel(a.status)}</td><td>{a._count.violations}</td></tr>)}</tbody></table>{!attempts.length && <p>No attempts found.</p>}
     </section><nav className="row">
       {page > 1 && <Link href={"?" + params + "&page=" + (page - 1)}>Previous</Link>}

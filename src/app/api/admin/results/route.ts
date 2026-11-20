@@ -1,6 +1,7 @@
 import { adminId } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { findResults } from "@/lib/results";
+import { finalMarks, adjustmentHistory } from "@/lib/score-adjustments";
 import { statusLabel } from "@/lib/quiz-schema";
 
 function csv(value: string | number | undefined) {
@@ -16,10 +17,10 @@ export async function GET(request: Request) {
   if (account?.role !== "SUPER_ADMIN" && !account?.canExportResults) return new Response("Export disabled by administrator", { status: 403 });
   const query = Object.fromEntries(new URL(request.url).searchParams);
   const results = await findResults(id, query);
-  const rows = [["Student", "Roll number", "Semester", "Quiz", "Obtained marks", "Total marks", "Percentage", "Status", "Monitoring events", "Submitted (UTC)"],
+  const rows = [["Student", "Roll number", "Semester", "Quiz", "Obtained marks", "Total marks", "Percentage", "Status", "Monitoring events", "Submitted (UTC)", "Updated marks (final)", "Adjustment reason"],
     ...results.map(a => [a.studentName, a.rollNumber, a.semester, a.quizTitle, a.submittedAt && !a.gradingPending ? a.obtainedMarks : undefined, a.totalMarks,
-      a.submittedAt && !a.gradingPending ? Math.round(a.obtainedMarks * 100 / a.totalMarks) : undefined,
-      (a.gradingPending ? statusLabel(a.status) + " – Awaiting grading" : statusLabel(a.status)), a._count.violations, a.submittedAt?.toISOString()])];
+      a.submittedAt && !a.gradingPending ? Math.round(finalMarks(a) * 100 / a.totalMarks) : undefined,
+      (a.gradingPending ? statusLabel(a.status) + " – Awaiting grading" : statusLabel(a.status)), a._count.violations, a.submittedAt?.toISOString(), a.submittedAt && !a.gradingPending ? finalMarks(a) : undefined, adjustmentHistory(a.markAdjustments).at(-1)?.reason ?? ""])];
   return new Response("\uFEFF" + rows.map(row => row.map(csv).join(",")).join("\r\n"), { headers: {
     "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": 'attachment; filename="quiz-results.csv"', "Cache-Control": "private, no-store",
   } });

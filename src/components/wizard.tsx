@@ -11,7 +11,7 @@ import { getQuizIssues, quizFieldId, type QuizIssue } from "@/lib/quiz-validatio
 import { SubjectPicker } from "./subject-picker";
 import { CodeEditor } from "./code-editor";
 import { CodeContent } from "./code-content";
-import { CopyLink } from "./copy-link";
+import { QuizShareDialog } from "./quiz-share-dialog";
 import { QuizSettings } from "./quiz-settings";
 
 const blank: QuizInput = {
@@ -28,6 +28,7 @@ export function Wizard({ subjects, initial, id, code, locked = false }: { subjec
   const [quiz, setQuiz] = useState(initial ?? blank);
   const [savedId, setSavedId] = useState(id);
   const [publishedCode, setPublishedCode] = useState(code);
+  const [shareOpen, setShareOpen] = useState(false);
   const [step, setStep] = useState(0);
   const [questionIndex, setQuestionIndex] = useState(0);
   const activeQuestion = Math.max(0, Math.min(questionIndex, quiz.questions.length - 1));
@@ -135,7 +136,8 @@ export function Wizard({ subjects, initial, id, code, locked = false }: { subjec
       else {
         setSavedId(result.id);
         setPublishedCode(result.published ? result.code : undefined);
-        setNotice(result.published ? "Quiz published. Share the student link below." : "Draft saved.");
+        setShareOpen(result.published);
+        setNotice(result.published ? "Quiz published. Use Share quiz above to view the student link." : "Draft saved.");
         if (result.id) window.history.replaceState(null, "", "/admin/quizzes/" + result.id + "/edit");
       }
     } catch {
@@ -148,7 +150,12 @@ export function Wizard({ subjects, initial, id, code, locked = false }: { subjec
   return <div className="quiz-studio">
     <header className="studio-heading"><Link href="/admin/quizzes">← Quiz library</Link><h1>{id ? quiz.title : "Create a quiz"}</h1>
       <p className="muted">Turn your next lesson into a great challenge.</p><span className="studio-heading-tag"><Sparkles size={15} /> Quiz creation studio</span></header>
-    {!locked && <button type="button" disabled={busy} className="button" onClick={() => void persist(false)}><Save size={17} />{busy ? "Saving…" : "Save draft & continue later"}</button>}
+    <div className="row wrap studio-top-actions">
+      {publishedCode && <button type="button" className="primary" aria-haspopup="dialog" aria-expanded={shareOpen} onClick={() => setShareOpen(true)}><Rocket size={17} /> Share quiz</button>}
+      {publishedCode && savedId && <Link className="button" href={"/admin/quizzes/" + savedId + "/leaderboard"}>Results and leaderboard</Link>}
+      {!locked && <button type="button" disabled={busy} className="button" onClick={() => void persist(false)}><Save size={17} />{busy ? "Saving…" : "Save draft & continue later"}</button>}
+    </div>
+    {publishedCode && <QuizShareDialog code={publishedCode} title={quiz.title} open={shareOpen} onClose={() => setShareOpen(false)} />}
     <nav className="studio-steps" aria-label="Quiz setup">{steps.map((label, i) => {
       const Icon = stepIcons[i];
       return <button key={label} className={"studio-step studio-step-" + i + (step === i ? " studio-step-active" : "")}
@@ -157,7 +164,6 @@ export function Wizard({ subjects, initial, id, code, locked = false }: { subjec
       </button>;
     })}</nav>
     {locked && <p className="notice">This quiz has attempts. Its questions and settings are locked.</p>}
-    {publishedCode && savedId && <Link className="button" href={"/admin/quizzes/" + savedId + "/leaderboard"}>Results and leaderboard</Link>}
     <div className="studio-layout"><div className="studio-main">
     {visibleIssues.length > 0 && <section className="studio-errors" role="alert" aria-label="Quiz validation problems">
       <h3><AlertCircle size={19} /> {visibleIssues.length} {visibleIssues.length === 1 ? "item needs" : "items need"} attention</h3>
@@ -335,7 +341,6 @@ export function Wizard({ subjects, initial, id, code, locked = false }: { subjec
         <strong>{i + 1}. <CodeContent text={q.text} /></strong><p className="muted">{questionTypes[q.type]}</p>{q.type === "MCQ" ? <ol type="A">{q.options.map((text, index) => <li key={index}><CodeContent text={text} /></li>)}</ol> : <p className="notice">{q.type === "BLANK" ? "Student enters a short answer" : "Student writes an explanation"}</p>}
       </div>) : <p>Add questions to see a preview.</p>}</div>}
       {notice && <p role="status" className="notice">{notice}</p>}
-      {step === 3 && publishedCode && <CopyLink code={publishedCode} />}
       <div className="row between"><button disabled={step === 0} onClick={() => { setStep(step - 1); setPreview(false); }}>Back</button>
         {step < 3 && <button className="primary" onClick={continueStep}>Continue <ArrowRight size={16} /></button>}</div>
     </motion.section>
