@@ -56,7 +56,9 @@ export function StudentPreview() {
     <p className="muted">Return to the quiz editor and choose <strong>Student view</strong> again. Preview links expire after 15 minutes and never create student records.</p>
   </section></main>;
 
-  if (phase === "join") return <main className="student-preview-shell"><section className="student-preview-card student-preview-join stack">
+  if (phase === "join") return <main className="student-preview-shell quiz-copy-protected" onCopy={event => event.preventDefault()} onCut={event => event.preventDefault()} onContextMenu={event => event.preventDefault()} onDragStart={event => event.preventDefault()} onKeyDownCapture={event => {
+    if ((event.ctrlKey || event.metaKey) && ["c", "x"].includes(event.key.toLowerCase())) event.preventDefault();
+  }}><section className="student-preview-card student-preview-join stack">
     <div className="preview-mode-banner"><Eye size={17} /><strong>Lecturer preview mode</strong><span>Nothing entered here is saved.</span></div>
     <p className="eyebrow"><BookOpen size={16} /> Student assessment</p>
     <h1>{quiz.title || "Untitled quiz"}</h1>
@@ -86,7 +88,9 @@ export function StudentPreview() {
 
   if (!question) return <main className="student-preview-shell"><section className="student-preview-card stack"><h1>No questions yet</h1><p className="muted">Add a question in the editor, then reopen Student view.</p></section></main>;
   const last = position === quiz.questions.length - 1;
-  return <main className="student-preview-shell"><section className="student-preview-exam stack">
+  return <main className="student-preview-shell quiz-copy-protected" onCopy={event => event.preventDefault()} onCut={event => event.preventDefault()} onContextMenu={event => event.preventDefault()} onDragStart={event => event.preventDefault()} onKeyDownCapture={event => {
+    if ((event.ctrlKey || event.metaKey) && ["c", "x"].includes(event.key.toLowerCase())) event.preventDefault();
+  }}><section className="student-preview-exam stack">
     <div className="preview-mode-banner"><Eye size={17} /><strong>Lecturer preview mode</strong><span>Local-only answers · no saving</span></div>
     <header className="student-preview-exam-header"><div><p className="eyebrow">Student assessment preview</p><h1>{quiz.title || "Untitled quiz"}</h1><p>{student.name} · {student.rollNumber} · Semester {student.semester}</p></div><div className="timer"><Clock size={18} />{quiz.durationMinutes || 0}:00</div></header>
     <progress value={answered} max={Math.max(quiz.questions.length, 1)} aria-label="Questions answered" />

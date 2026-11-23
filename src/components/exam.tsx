@@ -340,7 +340,9 @@ export function Exam({ quiz, initial }: { quiz?: JoinQuiz; initial?: Extract<Sta
   const questionLocked = (attempt.policy.nextOnly && openedQuestion !== question.id) || (!!question.durationSeconds && (!questionDeadlines[question.id] || clock + offset >= questionDeadlines[question.id]));
   const completed = Object.values(answers).filter(value => !!value.trim()).length;
   const questionSeconds = question.durationSeconds && questionDeadlines[question.id] ? Math.max(0, Math.ceil((questionDeadlines[question.id] - clock - offset) / 1000)) : question.durationSeconds;
-  return <main className="exam exam-colorful">
+  return <main className="exam exam-colorful quiz-copy-protected" onCopy={event => event.preventDefault()} onCut={event => event.preventDefault()} onContextMenu={event => event.preventDefault()} onDragStart={event => event.preventDefault()} onKeyDownCapture={event => {
+    if ((event.ctrlKey || event.metaKey) && ["c", "x"].includes(event.key.toLowerCase())) event.preventDefault();
+  }}>
     <div className="row between"><div><p className="eyebrow">Live assessment</p><h1>{attempt.title}</h1></div>
       <div className={remaining < 60 ? "timer urgent" : "timer"}><Clock size={18} />{Math.floor(remaining / 60)}:{String(remaining % 60).padStart(2, "0")}</div>
     </div>
