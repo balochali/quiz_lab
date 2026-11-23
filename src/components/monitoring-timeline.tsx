@@ -20,9 +20,16 @@ export function MonitoringTimeline({ events }: { events: MonitoringEvent[] }) {
     <div className="monitoring-summary">{[["Focus losses", "BLUR"], ["Page hidden", "TAB_SWITCH"], ["Fullscreen exits", "FULLSCREEN_EXIT"]].map(([label, type]) => <div key={type}><strong>{events.filter(event => event.type === type).length}</strong><span>{label}</span></div>)}</div>
     {!events.length ? <p>No monitoring events recorded.</p> : <ol className="monitoring-event-list">{timeline.map(event => {
       const info = descriptions[event.type] ?? { title: event.type, text: "A browser monitoring event was recorded.", tone: "violet" };
+      const focusPair = event.interval?.loss.type === "BLUR";
       return <li key={event.id}><details className={"monitoring-event monitoring-tone-" + info.tone}>
         <summary><span className="monitoring-event-icon"><Eye size={18} /></span><span><strong>{info.title}</strong><time dateTime={event.createdAt.toISOString()}>{formatKarachiDateTime(event.createdAt)}</time></span><ArrowUpRight size={16} /></summary>
-        <div className="monitoring-event-body"><p>{info.text}</p><div className="monitoring-context-chips"><span>Question {event.context?.questionNumber ?? "not recorded"}</span>{event.context?.visibility && <span>Page: {event.context.visibility}</span>}{typeof event.context?.hasFocus === "boolean" && <span>Window focused: {event.context.hasFocus ? "Yes" : "No"}</span>}{typeof event.context?.fullscreen === "boolean" && <span>Fullscreen: {event.context.fullscreen ? "Yes" : "No"}</span>}</div><p className="monitoring-interval"><Clock size={15} />{event.durationMs !== null ? "Recorded loss-to-return interval: " + durationLabel(event.durationMs) : "No matching loss/return pair recorded; duration unavailable."}</p></div>
+        <div className="monitoring-event-body"><p>{info.text}</p><div className="monitoring-context-chips"><span>Question {event.context?.questionNumber ?? "not recorded"}</span>{event.context?.visibility && <span>Page: {event.context.visibility}</span>}{typeof event.context?.hasFocus === "boolean" && <span>Window focused: {event.context.hasFocus ? "Yes" : "No"}</span>}{typeof event.context?.fullscreen === "boolean" && <span>Fullscreen: {event.context.fullscreen ? "Yes" : "No"}</span>}</div>
+          {event.interval ? <div className="monitoring-pair" aria-label="Matched monitoring interval">
+            <span><small>{focusPair ? "Focus lost" : "Signal started"}</small><time dateTime={event.interval.loss.createdAt.toISOString()}>{formatKarachiDateTime(event.interval.loss.createdAt)}</time></span>
+            <span><small>{focusPair ? "Focus returned" : "Signal returned"}</small><time dateTime={event.interval.returned.createdAt.toISOString()}>{formatKarachiDateTime(event.interval.returned.createdAt)}</time></span>
+            <strong><Clock size={15} /> Away for {durationLabel(event.interval.durationMs)}</strong>
+          </div> : <p className="monitoring-interval"><Clock size={15} />No matching loss/return pair recorded; duration unavailable.</p>}
+        </div>
       </details></li>;
     })}</ol>}
   </section>;

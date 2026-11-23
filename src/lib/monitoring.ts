@@ -9,7 +9,7 @@ export function formatKarachiDateTime(value: Date | string) {
 export function monitoringTimeline(events: MonitoringEvent[]) {
   const sorted = [...events].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   const open = new Map<string, MonitoringEvent>();
-  const intervals = new Map<string, number>();
+  const intervals = new Map<string, { durationMs: number; loss: MonitoringEvent; returned: MonitoringEvent }>();
   const losses = new Set(["BLUR", "TAB_SWITCH", "FULLSCREEN_EXIT"]);
   const returns: Record<string, string> = { FOCUS: "BLUR", VISIBLE: "TAB_SWITCH", FULLSCREEN_RESTORED: "FULLSCREEN_EXIT" };
   for (const event of sorted) {
@@ -18,10 +18,14 @@ export function monitoringTimeline(events: MonitoringEvent[]) {
     const previous = open.get(returns[event.type]);
     if (previous) {
       const duration = Math.max(0, event.createdAt.getTime() - previous.createdAt.getTime());
-      intervals.set(previous.id, duration); intervals.set(event.id, duration); open.delete(returns[event.type]);
+      const interval = { durationMs: duration, loss: previous, returned: event };
+      intervals.set(previous.id, interval); intervals.set(event.id, interval); open.delete(returns[event.type]);
     }
   }
-  return sorted.map(event => ({ ...event, context: monitoringContext(event.details), durationMs: intervals.get(event.id) ?? null }));
+  return sorted.map(event => {
+    const interval = intervals.get(event.id);
+    return { ...event, context: monitoringContext(event.details), durationMs: interval?.durationMs ?? null, interval };
+  });
 }
 export function durationLabel(milliseconds: number) {
   const seconds = Math.round(milliseconds / 1000);
