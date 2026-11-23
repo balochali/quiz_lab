@@ -2,13 +2,12 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { adminId } from "@/lib/auth";
 import { SignupForm } from "@/components/registration-form";
+import { AuthShell } from "@/components/auth-shell";
 
 export default async function Signup() {
   if (await adminId()) redirect("/admin/dashboard");
-  return <main className="narrow card">
-    <p className="eyebrow">Lecturer workspace</p><h1>Create an account</h1>
-    <p>Enter your email. We’ll send you a link to confirm it and choose a password.</p>
+  return <AuthShell mode="Create lecturer account" title="Start with QuizLab" description="Use your teaching email. We’ll send a confirmation link so you can choose a secure password.">
     <SignupForm />
-    <Link href="/admin/login">Already have an account? Sign in</Link>
-  </main>;
+    <p className="auth-switch">Already have a QuizLab account? <Link href="/admin/login">Sign in</Link></p>
+  </AuthShell>;
 }
