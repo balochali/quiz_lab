@@ -147,6 +147,32 @@ export function Wizard({ subjects, initial, id, code, locked = false }: { subjec
     }
   }
 
+  function openStudentPreview() {
+    setError("");
+    try {
+      const token = typeof crypto.randomUUID === "function" ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2);
+      const prefix = "quizlab-student-preview:";
+      const now = Date.now();
+      // Preview payloads live only in this browser, and stale payloads are removed.
+      for (let index = 0; index < localStorage.length; index++) {
+        const key = localStorage.key(index);
+        if (!key?.startsWith(prefix)) continue;
+        try {
+          const payload = JSON.parse(localStorage.getItem(key) ?? "{}");
+          if (!Number.isFinite(payload.createdAt) || now - payload.createdAt > 15 * 60 * 1000) localStorage.removeItem(key);
+        } catch { localStorage.removeItem(key); }
+      }
+      localStorage.setItem(prefix + token, JSON.stringify({ createdAt: now, quiz }));
+      const tab = window.open("/admin/preview?token=" + encodeURIComponent(token), "_blank");
+      if (!tab) {
+        localStorage.removeItem(prefix + token);
+        setError("Your browser blocked the student preview. Allow pop-ups for QuizLab and try again.");
+      }
+    } catch {
+      setError("Could not prepare the student preview in this browser. Try again after saving your work.");
+    }
+  }
+
   return <div className="quiz-studio">
     <header className="studio-heading"><Link href="/admin/quizzes">← Quiz library</Link><h1>{id ? quiz.title : "Create a quiz"}</h1>
       <p className="muted">Turn your next lesson into a great challenge.</p><span className="studio-heading-tag"><Sparkles size={15} /> Quiz creation studio</span></header>
@@ -154,6 +180,7 @@ export function Wizard({ subjects, initial, id, code, locked = false }: { subjec
       {publishedCode && <button type="button" className="primary" aria-haspopup="dialog" aria-expanded={shareOpen} onClick={() => setShareOpen(true)}><Rocket size={17} /> Share quiz</button>}
       {publishedCode && savedId && <Link className="button" href={"/admin/quizzes/" + savedId + "/leaderboard"}>Results and leaderboard</Link>}
       {!locked && <button type="button" disabled={busy} className="button" onClick={() => void persist(false)}><Save size={17} />{busy ? "Saving…" : "Save draft & continue later"}</button>}
+      <button type="button" className="button student-view-button" onClick={openStudentPreview}><Eye size={17} /> Student view <ArrowRight size={16} /></button>
     </div>
     {publishedCode && <QuizShareDialog code={publishedCode} title={quiz.title} open={shareOpen} onClose={() => setShareOpen(false)} />}
     <nav className="studio-steps" aria-label="Quiz setup">{steps.map((label, i) => {
